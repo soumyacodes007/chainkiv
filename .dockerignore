@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.chainkiv
+.git
+.claude
+node_modules
+web
+spike
+test
+*.png
+*.jpg

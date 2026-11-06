@@ -445,7 +445,7 @@ rather than green.
 | 33 | Probe | Prober stops | Readings expire after 2 hours; dots turn grey |
 | 34 | Probe | Prober lies | Other probers and Recheck can contradict it; disagreement is flagged |
 | 35 | Probe | Prober clock is wrong | Compared with block time; readings over 5 minutes off are flagged |
-| 36 | Probe | Hostile RPC sends huge responses | 64 KB cap and 5 s timeout per call |
+| 36 | Probe | Hostile RPC sends huge responses | 1 MB cap and 5 s timeout per call |
 | 37 | Probe | Record points at an internal address | Private, loopback and link-local ranges refused after DNS resolution |
 | 38 | Proposals | Proposal for an existing chain ID | Validator posts `invalid` |
 | 39 | Proposals | Flood from one address | Expire in 14 days; unreviewed area only |

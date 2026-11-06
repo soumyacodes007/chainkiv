@@ -1,7 +1,9 @@
-# ChainKiv
+# Chainroll
 
 The EthereumLists chain registry on Arkiv: queryable, checkable against a signed release, with live evidence for every
 RPC and Chainlist's privacy labels beside it.
+
+The repo, CLI and Arkiv records keep the technical name `chainkiv`.
 
 Built at ETHGlobal Mumbai. The plan is in [PRD.md](PRD.md). This is a work in progress.
 
@@ -55,6 +57,34 @@ bun run cli query "chainId = u64(8453) AND \$owner = addr(0xb6d7BE32085f47D07dE9
 | Prober A | `0xecDEfDB69daF7De91615adf1D7bb955AA0D5a521` |
 | Prober B | `0x6eEAaa1835b82A8ecbF11BAa9c109FE009534d17` |
 | Validator | `0x06B38cA11785e6b75B489F642683216a2eA55df3` |
+
+## How to check the publisher
+
+The publisher is named by `chainroll.eth` on Sepolia, in the text records `arkiv.publisher`, `arkiv.chainId`,
+`arkiv.latestAnchor`, `arkiv.root`, `arkiv.release`, `arkiv.metaHash` and `arkiv.probers`. Verify fails if the root on ENS
+differs from the anchor. It is a testnet name, and ENS warns that Sepolia names may be reset.
+
+ENSv2 does more than store these records:
+
+- **Probers are subnames.** `chainroll.eth` has its own registry, `probers.chainroll.eth` has another, and each prober is
+  `a.probers.chainroll.eth`, with its own resolver. A prober can write its text records but not the address that identifies
+  it. Apps read the list from ENS, so a prober can be added or removed without a new release.
+- **Keys can be limited.** `chainkiv ens-handover --to <address> --confirm chainroll.eth` moves the name to a cold wallet or
+  multisig and leaves the hot key only the four release records. A stolen hot key cannot take the name.
+  [`spike/ens-roles-test.ts`](spike/ens-roles-test.ts) proves this on a throwaway name.
+
+`chainroll.eth` itself has **not** been handed over. It is still held by the publisher key, and that key is ours.
+
+```bash
+bun run cli verify 8453
+bun run cli verify --all
+bun run cli verify --chainlist
+```
+
+## Probers
+
+The two probers run on Railway from the `Dockerfile`, Prober A in Southeast Asia and Prober B in US West. Each wallet
+must run in exactly one place, because two copies of one prober collide on nonces.
 
 ## Data sources and licences
 
