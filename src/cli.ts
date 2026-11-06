@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // chainkiv: import, survey, probe, verify and query. Keys come from the environment and are never printed.
-import { type Hex } from "viem"
+import { formatEther, parseEther, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { LOCAL_CHAIN_ID, localNetwork, rabdiNetwork, reader, writer, type Network } from "./arkiv"
 import { createRegistry } from "./client"
@@ -202,6 +202,24 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     print(await response.json())
   },
 
+  /** Moves testnet tGLM from the publisher to this project's own prober wallets. Nothing else is accepted as a target. */
+  async "fund-probers"(flags) {
+    const net = network()
+    const publisher = keyFor("PUBLISHER_KEY", net)
+    const amount = parseEther(flags.amount ?? "1")
+    const client = reader(net)
+    const wallet = writer(net, publisher)
+    for (const name of ["PROBER_KEY", "PROBER_B_KEY"]) {
+      const target = keyFor(name, net).address
+      console.log(`${flags["dry-run"] ? "Would send" : "Sending"} ${formatEther(amount)} tGLM to ${name.replace("_KEY", "")} ${target}`)
+      if (flags["dry-run"]) continue
+      const hash = await wallet.sendTransaction({ to: target, value: amount })
+      await client.waitForTransactionReceipt({ hash })
+      console.log(`Done: ${hash}`)
+    }
+    console.log(`Publisher balance ${formatEther(await client.getBalance({ address: publisher.address }))} tGLM`)
+  },
+
   async doctor() {
     const net = network()
     const client = reader(net)
@@ -236,6 +254,7 @@ if (!command) {
   chain     <chainId>
   query     '<arkiv query>'
   doctor    Check network, wallets and the publisher lookup
+  fund-probers --amount 1 [--dry-run]
   new-wallet`)
   process.exit(name === "help" ? 0 : 1)
 }
