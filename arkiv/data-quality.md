@@ -165,8 +165,61 @@ block them.
 
 Read through the SDK with both probers trusted, 32 Ethereum RPCs and 12 Base RPCs passed from both regions.
 
+## Health readings over hours
+
+The two probers ran on Railway for about 5 hours on 6 and 7 Nov 2026, and every number here is from that run. Each covers
+the same 958 RPCs.
+
+| Check | Prober A, Southeast Asia | Prober B, US West |
+|---|---|---|
+| Rounds | 13 | 13 |
+| RPCs up per round | 450 to 465 | 446 to 464 |
+| Round time | 221 to 228 s | 212 to 224 s |
+| tGLM used | About 0.9 | About 0.9 |
+
+At one moment on 7 Nov, both probers held a reading for all 958 RPCs. Both passed 444 and both failed 495, and they
+disagreed on 19, or 2%.
+
+## Reading freshness
+
+**Target: newest reading under 15 minutes old. Result: met in 15 of 16 samples, and missed by 18 seconds in the other.**
+
+Ethereum's RPCs were sampled every 2 minutes for 30 minutes on 7 Nov 2026. A round starts 20 minutes after the last one
+ends, so one prober's readings reached 27 minutes old. The probers are not in step, so the newest reading from either is
+younger.
+
+| Age of readings | Result |
+|---|---|
+| Oldest from Prober A | 24.9 min |
+| Oldest from Prober B | 27.4 min |
+| Worst case for the newest from either prober | 15.3 min |
+
+A separate check of all 958 RPCs found the newest reading from either prober was 12.6 minutes old at worst, at that moment.
+The probers' timing is not controlled, so if their rounds drift into step, the newest reading could reach about 27 minutes.
+One prober alone misses this target.
+
+RPCs outside these 958 are not probed every round, so they show the 6 Nov survey. The site's pass count mixes both sources.
+
+## Sync lag
+
+**Target: under 15 minutes. Result: not met, and nothing syncs automatically yet.**
+
+| Check | Result |
+|---|---|
+| Upstream commit `e1747428` | 5 Nov 2026, 13:35:58 UTC |
+| Release 1 anchored on Sepolia | 6 Nov 2026, 16:57:48 UTC |
+| Lag for this one release | 27 h 22 min |
+| Upstream commits since | None when checked on 7 Nov 2026, so the copy is current |
+| Time to run a sync and anchor it | 271 s, for a run with 20 deletes and no chain changes |
+
+The lag is long because this was our first release, run by hand. A sync takes about 5 minutes, so the target looks
+reachable with a job that checks upstream every few minutes, but that job does not exist and has not been timed on a real
+upstream change.
+
+Reproduce: `spike/measure.ts --watch 16`.
+
 ## Not measured yet
 
-- Sync lag from an upstream commit to Arkiv
-- Health readings over hours
+- Sync lag on a real upstream change, with an automatic sync
+- Health readings over days
 - Whether the same RPCs failed in both survey locations
