@@ -251,6 +251,10 @@ export function createRegistry(options: RegistryOptions) {
   }
 
   const latestRelease = async () => (await release()).anchor ?? null
+  /** A check that a rate limit stopped halfway is cached like any other, so a retry has to clear it. */
+  const forgetRelease = () => {
+    releaseCache = undefined
+  }
   const releases = async () => {
     const rows = await readAll<any>(client, { schema: Release, owner: await owner() })
     return rows.map((r) => ({ releaseNo: val<bigint>(r.releaseNo)!, commit: val<string>(r.commit)!, root: val<string>(r.merkleRoot)!, chainCount: val<bigint>(r.chainCount)!, anchorNetwork: val<string>(r.anchorNetwork)!, anchorTx: val<string>(r.anchorTx) }))
@@ -259,7 +263,7 @@ export function createRegistry(options: RegistryOptions) {
 
   const toChainsJson = async () => (await everyChain()).map((c) => c.file).sort((a, b) => a.chainId - b.chainId)
 
-  return { client, trust, release, meta, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, allHealth, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
+  return { client, trust, release, meta, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, allHealth, forgetRelease, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
 }
 
 export { readingText }

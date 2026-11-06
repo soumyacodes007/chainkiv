@@ -127,6 +127,8 @@ export async function readExplorers(id: string): Promise<ExplorerRow[]> {
   return rows.map((r) => ({ name: val(r.name)!, url: val(r.url)!, standard: val(r.standard)! }))
 }
 
+const LIMITED = /HTTP request failed|429|budget exhausted/i
+
 const STEPS: [string, Step["group"], string][] = [
   ["publisher", "publisher", "Publisher named on Ethereum"],
   ["anchor", "publisher", "Release signed by the publisher"],
@@ -137,11 +139,24 @@ const STEPS: [string, Step["group"], string][] = [
   ["upstream", "data", "Commit is in the upstream main branch"],
 ]
 
+/** Arkiv's no-key limit clears within minutes, and Verify matters more than a quick answer, so it waits. */
+async function verifyPatiently(id: bigint): Promise<Verdict> {
+  for (let attempt = 0; ; attempt++) {
+    const verdict = await reg.verify(id).catch((e: Error) => {
+      if (attempt === 3 || !LIMITED.test(e.message)) throw e
+      return null
+    })
+    if (verdict && (attempt === 3 || !verdict.steps.some((s) => s.status !== "pass" && LIMITED.test(s.detail ?? "")))) return verdict
+    reg.forgetRelease()
+    await new Promise((done) => setTimeout(done, 60_000))
+  }
+}
+
 /** Always seven steps, in the PRD's order. A step that could not run says so. */
 export async function runVerify(id: string): Promise<Verdict> {
   let verdict: Verdict
   try {
-    verdict = await reg.verify(BigInt(id))
+    verdict = await verifyPatiently(BigInt(id))
   } catch (e) {
     verdict = { ok: false, state: "incomplete", steps: [{ id: "publisher", group: "publisher", label: STEPS[0]![2], status: "not-run", detail: (e as Error).message.split("\n")[0]!.slice(0, 160) }] }
   }
