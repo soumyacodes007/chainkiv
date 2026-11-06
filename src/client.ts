@@ -199,7 +199,8 @@ export function createRegistry(options: RegistryOptions) {
   async function verifyAll() {
     const [check, chains] = await Promise.all([release(), everyChain()])
     const results = chains.map((c) => ({ chainId: c.chainId, verdict: checkChain(check, c.chainId, { raw: c.raw, attrs: c.attrs }) }))
-    const missing = check.allLeaves ? check.allLeaves.filter((l) => !chains.some((c) => c.chainId === l.chainId)).map((l) => l.chainId) : []
+    const present = new Set(chains.map((c) => c.chainId))
+    const missing = check.allLeaves ? check.allLeaves.filter((l) => !present.has(l.chainId)).map((l) => l.chainId) : []
     return { check, results, missing, verified: results.filter((r) => r.verdict.ok).length }
   }
 

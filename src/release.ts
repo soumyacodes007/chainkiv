@@ -21,16 +21,21 @@ export function merkleRoot(leaves: Leaf[]): Hex {
   return buildTree(leaves).root as Hex
 }
 
-/** Checks one leaf against a root, using a proof computed from the manifest. */
+const proofTrees = new WeakMap<Leaf[], { tree: ReturnType<typeof buildTree>; index: Map<string, number> }>()
+
+/** Checks one leaf against a root, using a proof computed from the manifest. Builds the tree once per manifest. */
 export function proveLeaf(leaves: Leaf[], leaf: Leaf, root: string): boolean {
-  const tree = buildTree(leaves)
-  const value = tuple(leaf)
-  for (const [index, entry] of tree.entries()) {
-    if (entry[0] === value[0] && entry[1] === value[1] && entry[2] === value[2]) {
-      return StandardMerkleTree.verify(root, LEAF_ENCODING, value, tree.getProof(index))
-    }
+  let cached = proofTrees.get(leaves)
+  if (!cached) {
+    const tree = buildTree(leaves)
+    const index = new Map<string, number>()
+    for (const [i, entry] of tree.entries()) index.set(entry.join("|"), i)
+    cached = { tree, index }
+    proofTrees.set(leaves, cached)
   }
-  return false
+  const value = tuple(leaf)
+  const position = cached.index.get(value.join("|"))
+  return position !== undefined && StandardMerkleTree.verify(root, LEAF_ENCODING, value, cached.tree.getProof(position))
 }
 
 /** One line per chain: `chainId,blob,shortName`. Short names go last because they are the only free text. */

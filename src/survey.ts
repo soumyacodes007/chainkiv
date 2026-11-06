@@ -1,6 +1,6 @@
 // A read-only survey of every listed RPC. Needs no wallet. Anything that fails is tried once more later, so a brief
 // network problem on this machine is not counted as a dead RPC.
-import { pool, probe, type Reading } from "./probe"
+import { pool, probeOnline, type Reading } from "./probe"
 import type { Source } from "./source"
 
 export type Verdict = "passed" | "wrong-chain" | "wrong-genesis" | "stale" | "down" | "rate-limited" | "needs-key" | "refused"
@@ -46,13 +46,17 @@ export function verdictOf(r: Reading, agreed: string | null): Verdict {
 }
 
 export type SurveyRow = Reading & { verdict: Verdict; lagBlocks: number }
-export type Survey = { rows: SurveyRow[]; genesis: Map<string, GenesisVote>; retried: number }
+export type Survey = { rows: SurveyRow[]; genesis: Map<string, GenesisVote>; retried: number; outageChecks: number }
 
-export async function survey(source: Source, { limit = 48, onProgress }: { limit?: number; onProgress?: (done: number, total: number) => void } = {}): Promise<Survey> {
+export async function survey(source: Source, { limit = 24, onProgress }: { limit?: number; onProgress?: (done: number, total: number) => void } = {}): Promise<Survey> {
   const jobs = source.chains.flatMap((c) => c.rpcs.map((r) => ({ chainId: c.attrs.chainId, url: r.url })))
   let done = 0
+  let outages = 0
+  const onOutage = () => {
+    outages++
+  }
   const run = async (job: { chainId: bigint; url: string }) => {
-    const reading = await probe(job.chainId, job.url)
+    const reading = await probeOnline(job.chainId, job.url, onOutage)
     if (++done % 250 === 0) onProgress?.(done, jobs.length)
     return reading
   }
@@ -60,7 +64,7 @@ export async function survey(source: Source, { limit = 48, onProgress }: { limit
 
   const failed = first.flatMap((r, i) => (!r.up && r.outcome !== "skipped" && r.outcome !== "blocked" ? [i] : []))
   await Bun.sleep(5_000)
-  const second = await pool(failed, Math.ceil(limit / 2), 2, (i) => hostOf(jobs[i]!.url), (i) => probe(jobs[i]!.chainId, jobs[i]!.url))
+  const second = await pool(failed, Math.ceil(limit / 2), 2, (i) => hostOf(jobs[i]!.url), (i) => probeOnline(jobs[i]!.chainId, jobs[i]!.url, onOutage))
   failed.forEach((index, n) => {
     if (second[n]!.up || second[n]!.reportedChainId !== null) first[index] = second[n]!
   })
@@ -79,7 +83,7 @@ export async function survey(source: Source, { limit = 48, onProgress }: { limit
     const head = readings.reduce((max, r) => (r.chainIdOk && r.blockNumber > max ? r.blockNumber : max), 0n)
     for (const r of readings) rows.push({ ...r, verdict: verdictOf(r, vote.hash), lagBlocks: r.up && r.chainIdOk ? Number(head - r.blockNumber) : -1 })
   }
-  return { rows, genesis, retried: failed.length }
+  return { rows, genesis, retried: failed.length, outageChecks: outages }
 }
 
 export function summarise(result: Survey) {
@@ -93,5 +97,5 @@ export function summarise(result: Survey) {
     byChain.set(id, (byChain.get(id) ?? 0) + (r.verdict === "passed" ? 1 : 0))
   }
   const chainsWithNoPassingRpc = [...byChain.values()].filter((n) => n === 0).length
-  return { total: result.rows.length, counts, reasons, chainsProbed: byChain.size, chainsWithNoPassingRpc, retried: result.retried }
+  return { total: result.rows.length, counts, reasons, chainsProbed: byChain.size, chainsWithNoPassingRpc, retried: result.retried, outageChecks: result.outageChecks }
 }

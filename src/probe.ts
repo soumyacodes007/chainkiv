@@ -170,8 +170,14 @@ export async function probe(chainId: bigint, url: string, now = Date.now()): Pro
     const id = await timed<string>("eth_chainId", [])
     reading.reportedChainId = BigInt(id).toString()
     reading.chainIdOk = BigInt(id) === chainId
-    const genesis = await timed<{ hash?: string }>("eth_getBlockByNumber", ["0x0", false])
-    reading.genesisSeen = genesis.hash ?? ""
+    // Pruned nodes refuse block 0 and still serve the head, so this leaves the genesis unknown, not the RPC down.
+    try {
+      const genesis = await timed<{ hash?: string }>("eth_getBlockByNumber", ["0x0", false])
+      reading.genesisSeen = genesis.hash ?? ""
+    } catch (error) {
+      const outcome = classify(error).outcome
+      if (outcome !== "rpc-error" && outcome !== "bad-response") throw error
+    }
     const latest = await timed<{ hash?: string; number?: string; timestamp?: string }>("eth_getBlockByNumber", ["latest", false])
     reading.blockHash = latest.hash ?? ""
     reading.blockNumber = BigInt(latest.number ?? 0)
@@ -186,6 +192,41 @@ export async function probe(chainId: bigint, url: string, now = Date.now()): Pro
     close()
   }
   return reading
+}
+
+const CANARIES = ["https://www.cloudflare.com/cdn-cgi/trace", "https://www.google.com/generate_204"]
+let lastCheck = 0
+let lastResult: Promise<boolean> = Promise.resolve(true)
+
+/** Is this machine online? A failed probe says nothing about an RPC when the answer is no. */
+export function networkOk(): Promise<boolean> {
+  if (Date.now() - lastCheck < 3_000) return lastResult
+  lastCheck = Date.now()
+  lastResult = Promise.any(CANARIES.map(async (url) => {
+    const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { "user-agent": USER_AGENT } })
+    if (response.status >= 500) throw new Error("canary failed")
+  })).then(() => true, () => false)
+  return lastResult
+}
+
+export async function waitForNetwork(onWait?: () => void) {
+  while (!(await networkOk())) {
+    onWait?.()
+    await Bun.sleep(5_000)
+  }
+}
+
+const NETWORK_OUTCOMES: Outcome[] = ["timeout", "dns", "refused", "tls"]
+
+/** Probes, and throws a reading away if this machine lost its connection during the probe. */
+export async function probeOnline(chainId: bigint, url: string, onWait?: () => void): Promise<Reading> {
+  for (;;) {
+    await waitForNetwork(onWait)
+    const reading = await probe(chainId, url)
+    if (reading.up || !NETWORK_OUTCOMES.includes(reading.outcome)) return reading
+    lastCheck = 0
+    if (await networkOk()) return reading
+  }
 }
 
 /** Runs tasks with a global limit and at most `perHost` at once for each host. */

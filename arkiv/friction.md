@@ -15,7 +15,35 @@ Scripts named in parts 2 and 3 live in those projects' repos, not this one.
 
 Versions unless noted: `@arkiv-network/sdk` 1.0.1, `viem` 2.57.16, Bun 1.3.14.
 
-<!-- CHAINKIV-ENTRIES -->
+### A batch that is too large fails with no reason
+
+- **Expected:** an error saying the batch exceeded a size or gas limit, and what that limit is.
+- **What happened:** `executeBatch` with 60 entities of about 1.5 KB failed with `Transaction failed: Execution error
+  without revert data`. Batches of 40 succeeded. A real import also failed at 40 entities, probably because some
+  chain files are larger. Nothing in the error points at the size of the batch.
+- **Why it matters:** a bulk importer has to find a safe size by trial and error, and a batch that fails looks the same
+  as any other failed transaction.
+- **Reproduce:** `ARKIV_NETWORK=local bun run --conditions browser spike/limits.ts` on a private `arkiv-reth` v1.0.1
+  `--dev` chain.
+- **Suggestion:** return the limit that was hit, and let clients read it, or estimate the batch before sending.
+- **Our workaround:** batches of 20.
+
+### Release data has to go one part per transaction
+
+- **Expected:** a batch holding two manifest parts (100 KB and 58 KB) to fit, because each is under the 128 KiB limit.
+- **What happened:** the batch failed with the same `Execution error without revert data`. Each part alone succeeded,
+  up to 128 KB. So the value limit and the transaction limit are different, and only the first is documented where we
+  looked.
+- **Reproduce:** put two 100 KB `bytes` values in one `executeBatch` on a private `arkiv-reth` v1.0.1 `--dev` chain.
+- **Our workaround:** one transaction per part, written before the release entity, so a rerun can fill any gap.
+
+### What went smoothly
+
+| Tested | Result |
+|---|---|
+| Too-long lifetime | Clear error before sending: 200 days is refused, naming the chain's maximum of 7,884,000 blocks (about 182 days). 180 days works |
+| Large chain IDs | `u64` holds the largest chain ID, 2,716,446,429,837,001 |
+
 
 ## Part 2: Arkiv Horizon
 

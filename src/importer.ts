@@ -1,6 +1,7 @@
 // Turns one upstream commit into Arkiv entities. Each run compares with what the publisher already owns, so a rerun
 // finishes an interrupted import and a repeat run writes nothing new.
 import { ExpirationTime } from "@arkiv-network/sdk"
+import { eq } from "@arkiv-network/sdk/query"
 import { bool, bytes, i32, str, u64 } from "@arkiv-network/sdk/schema"
 import { readAll, val } from "./arkiv"
 import { encodeManifest, encodeMeta, merkleRoot, metaHash, type ReleaseMeta } from "./release"
@@ -180,10 +181,18 @@ export async function writeRelease(client: any, wallet: any, owner: string, sour
   const releaseNo = releases.reduce((max: bigint, r: any) => (val<bigint>(r.releaseNo)! > max ? val<bigint>(r.releaseNo)! : max), 0n) + 1n
   const parts = encodeManifest(leaves)
   const expiration = ExpirationTime.fromDays(CORE_DAYS)
+  // One transaction per part: together they exceed what a transaction can carry. A rerun writes only what is missing,
+  // and the release goes last, so its presence means the rest is there.
+  const written = await readAll<any>(client, { schema: Manifest, owner, where: eq("merkleRoot", str(root)), select: { part: true } })
+  const have = new Set(written.map((r) => val<number>(r.part)))
+  for (const [part, data] of parts.entries()) {
+    if (have.has(part)) continue
+    await send(wallet, { creates: [{ schema: Manifest, values: { merkleRoot: str(root), part: i32(part), parts: i32(parts.length), data: bytes(data) }, expiration }] })
+  }
+  const metas = await readAll(client, { schema: MetaSchema, owner, where: eq("metaHash", str(hash)), select: { metaHash: true } })
   await send(wallet, {
     creates: [
-      ...parts.map((data, part) => ({ schema: Manifest, values: { merkleRoot: str(root), part: i32(part), parts: i32(parts.length), data: bytes(data) }, expiration })),
-      { schema: MetaSchema, values: { metaHash: str(hash), data: bytes(encodedMeta) }, expiration },
+      ...(metas.length ? [] : [{ schema: MetaSchema, values: { metaHash: str(hash), data: bytes(encodedMeta) }, expiration }]),
       {
         schema: Release,
         values: {

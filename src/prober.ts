@@ -5,7 +5,7 @@ import { bool, bytes, dec, i32, str, u64 } from "@arkiv-network/sdk/schema"
 import { Database } from "bun:sqlite"
 import { hexToBytes, type Hex, type LocalAccount } from "viem"
 import { readAll, val } from "./arkiv"
-import { pool, probe, VERSION, type Reading } from "./probe"
+import { pool, probeOnline, VERSION, type Reading } from "./probe"
 import { readingText } from "./readings"
 import { Chain, Rpc, RpcHealth, RpcStats } from "./schemas"
 import { agreeGenesis, hostOf } from "./survey"
@@ -58,7 +58,7 @@ export async function runRound(opts: {
 }): Promise<Round> {
   const { client, wallet, account, region, targets, genesis, history } = opts
   const start = Date.now()
-  const readings = await pool(targets, 32, 4, (t) => hostOf(t.url), (t) => probe(t.chainId, t.url))
+  const readings = await pool(targets, 32, 4, (t) => hostOf(t.url), (t) => probeOnline(t.chainId, t.url))
 
   const byChain = new Map<string, Reading[]>()
   for (const r of readings) {
