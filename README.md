@@ -5,6 +5,9 @@ RPC and Chainlist's privacy labels beside it.
 
 The repo, CLI and Arkiv records keep the technical name `chainkiv`.
 
+**Live site:** [chainroll-flame.vercel.app](https://chainroll-flame.vercel.app). It is static files: your browser reads Arkiv
+and Ethereum directly.
+
 Built at ETHGlobal Mumbai. The plan is in [PRD.md](PRD.md). This is a work in progress.
 
 ## What it adds to a flat list
@@ -115,4 +118,6 @@ chose the idea, reviewed the trust design, funded the wallets and made the outwa
 
 - [arkiv/schema.md](arkiv/schema.md): entities, owners and expiry
 - [arkiv/data-quality.md](arkiv/data-quality.md): measured results
+- [arkiv/why-arkiv.md](arkiv/why-arkiv.md): registry questions, each with a query you can run
+- [arkiv/reach.md](arkiv/reach.md): coverage, who depends on the list, who has tried our copy
 - [arkiv/friction.md](arkiv/friction.md): rough edges, with steps to reproduce

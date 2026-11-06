@@ -37,6 +37,19 @@ Versions unless noted: `@arkiv-network/sdk` 1.0.1, `viem` 2.57.16, Bun 1.3.14.
 - **Reproduce:** put two 100 KB `bytes` values in one `executeBatch` on a private `arkiv-reth` v1.0.1 `--dev` chain.
 - **Our workaround:** one transaction per part, written before the release entity, so a rerun can fill any gap.
 
+### The no-key query budget runs out with no reset time
+
+- **Expected:** a site with no access key can read Arkiv, and is told when it can try again if it reads too much.
+- **What happened:** after repeated page loads from one network on 7 Nov 2026, `arkiv_query` returned `ANON_COST_LIMITED`
+  (`unauthenticated query budget exhausted`), while `eth_blockNumber` still answered. The body gave no reset time. Queries
+  worked again within about 20 minutes. Our own site caused this, by reading each chain's health with its own queries.
+- **Why it matters:** a browser cannot hold an access key, so every static site on Arkiv lives on this budget, and people
+  on one network may share it. We do not know its size or how it is counted.
+- **Reproduce:** with no access key, send `arkiv_query` calls from one IP until refused, then send `eth_blockNumber`.
+- **Suggestion:** publish the budget, and return when it resets.
+- **Our workaround:** a visit went from over 2,000 requests to about 40, by reading all readings in pages and skipping
+  the full list when it matches the signed release.
+
 ### What went smoothly
 
 | Tested | Result |
