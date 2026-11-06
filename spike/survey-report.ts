@@ -1,7 +1,7 @@
 // Re-scores a saved survey with the current rules and prints the numbers used in arkiv/data-quality.md.
 import { verdictOf } from "../src/survey"
 const j = await Bun.file(".chainkiv/survey.json").json()
-const rows = j.rows.map((r: any) => ({ ...r, verdict: verdictOf({ ...r, chainId: BigInt(r.chainId), blockNumber: BigInt(r.blockNumber) }, j.genesis[r.chainId]?.hash ?? null) }))
+const rows = j.rows.map((r: any) => ({ ...r, verdict: verdictOf({ ...r, chainId: BigInt(r.chainId), blockNumber: BigInt(r.blockNumber) }, j.genesis[r.chainId]?.hash ?? null, r.lagBlocks) }))
 const count = (list: any[], f: (r: any) => string) => list.reduce((o: Record<string, number>, r) => ((o[f(r)] = (o[f(r)] ?? 0) + 1), o), {})
 const tested = rows.filter((r: any) => !["needs-key", "refused"].includes(r.verdict))
 const chains = new Map<string, number>()

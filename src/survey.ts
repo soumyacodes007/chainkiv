@@ -3,7 +3,7 @@
 import { pool, probeOnline, type Reading } from "./probe"
 import type { Source } from "./source"
 
-export type Verdict = "passed" | "wrong-chain" | "wrong-genesis" | "stale" | "down" | "rate-limited" | "needs-key" | "refused"
+export type Verdict = "passed" | "unconfirmed" | "wrong-chain" | "wrong-genesis" | "stale" | "down" | "rate-limited" | "needs-key" | "refused"
 
 export type GenesisVote = { hash: string | null; votes: number; voters: number }
 
@@ -33,16 +33,19 @@ export const hostOf = (url: string) => {
 }
 
 const STALE_SECONDS = 3600
+/** Further behind the best head than any healthy node would be. */
+export const MAX_LAG_BLOCKS = 1000
 
-export function verdictOf(r: Reading, agreed: string | null): Verdict {
+export function verdictOf(r: Reading, agreed: string | null, lagBlocks = 0): Verdict {
   if (r.outcome === "skipped") return "needs-key"
   if (r.outcome === "blocked") return "refused"
   if (r.outcome === "rate-limited") return "rate-limited"
   if (r.reportedChainId !== null && !r.chainIdOk) return "wrong-chain"
   if (!r.up) return "down"
   if (agreed && r.genesisSeen && r.genesisSeen !== agreed) return "wrong-genesis"
-  if (r.blockTime && r.checkedAt - r.blockTime > STALE_SECONDS) return "stale"
-  return "passed"
+  if ((r.blockTime && r.checkedAt - r.blockTime > STALE_SECONDS) || lagBlocks >= MAX_LAG_BLOCKS) return "stale"
+  // With no agreed first block, or none from this RPC, the genesis check did not run, so this is never a pass.
+  return agreed && r.genesisSeen ? "passed" : "unconfirmed"
 }
 
 export type SurveyRow = Reading & { verdict: Verdict; lagBlocks: number }
@@ -81,7 +84,10 @@ export async function survey(source: Source, { limit = 24, onProgress }: { limit
     const vote = agreeGenesis(readings)
     genesis.set(id, vote)
     const head = readings.reduce((max, r) => (r.chainIdOk && r.blockNumber > max ? r.blockNumber : max), 0n)
-    for (const r of readings) rows.push({ ...r, verdict: verdictOf(r, vote.hash), lagBlocks: r.up && r.chainIdOk ? Number(head - r.blockNumber) : -1 })
+    for (const r of readings) {
+      const lagBlocks = r.up && r.chainIdOk ? Number(head - r.blockNumber) : -1
+      rows.push({ ...r, verdict: verdictOf(r, vote.hash, lagBlocks), lagBlocks })
+    }
   }
   return { rows, genesis, retried: failed.length, outageChecks: outages }
 }

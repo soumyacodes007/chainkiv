@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { deriveChain, deriveExplorers, deriveRpcs, fit, gitBlobId, parseFile, validate } from "../src/derive"
 import { buildTree, decodeAnchor, decodeManifest, encodeAnchor, encodeManifest, encodeMeta, merkleRoot, metaHash, proveLeaf, type Leaf } from "../src/release"
-import { isPrivateAddress, pool } from "../src/probe"
+import { isPrivateAddress, MAX_RESPONSE, pool, readCapped } from "../src/probe"
 import { readingText, signerOf } from "../src/readings"
 import { agreeGenesis, verdictOf } from "../src/survey"
 import type { Reading } from "../src/probe"
@@ -104,6 +104,12 @@ describe("release", () => {
 })
 
 describe("probe", () => {
+  test("a full Ethereum block fits under the response cap, and a huge response does not", async () => {
+    const block = "x".repeat(200 * 1024)
+    expect(await readCapped(new Response(block))).toBe(block)
+    await expect(readCapped(new Response("x".repeat(MAX_RESPONSE + 1)))).rejects.toThrow("over 1 MB")
+  })
+
   test("private addresses are refused", () => {
     for (const ip of ["127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:127.0.0.1"]) {
       expect(isPrivateAddress(ip)).toBe(true)
@@ -142,7 +148,7 @@ describe("survey", () => {
   })
 
   test("a pruned RPC with no genesis answer is not a wrong genesis", () => {
-    expect(verdictOf(reading({ genesisSeen: "" }), "0xaa")).toBe("passed")
+    expect(verdictOf(reading({ genesisSeen: "" }), "0xaa")).toBe("unconfirmed")
     expect(verdictOf(reading({ genesisSeen: "0xcc" }), "0xaa")).toBe("wrong-genesis")
   })
 

@@ -6,7 +6,8 @@ import { isIP } from "node:net"
 export const VERSION = "0.1.0"
 const USER_AGENT = `chainkiv-prober/${VERSION} (+https://github.com/soumyacodes007/chainkiv)`
 const TIMEOUT_MS = 5_000
-const MAX_RESPONSE = 64 * 1024
+// A full Ethereum block listing only hashes passed 100 KB in testing, so this has to stay well above that.
+export const MAX_RESPONSE = 1024 * 1024
 
 export type Outcome = "ok" | "timeout" | "dns" | "refused" | "tls" | "http" | "rate-limited" | "bad-response" | "blocked" | "rpc-error" | "skipped"
 
@@ -44,13 +45,15 @@ export async function refusedHost(host: string): Promise<string | null> {
   return addresses.some((a) => isPrivateAddress(a.address)) ? "private address" : null
 }
 
+const HASH = /^0x[0-9a-fA-F]{64}$/
+
 class ProbeError extends Error {
   constructor(readonly outcome: Outcome, message: string) {
     super(message)
   }
 }
 
-async function readCapped(response: Response): Promise<string> {
+export async function readCapped(response: Response): Promise<string> {
   const reader = response.body?.getReader()
   if (!reader) return ""
   const chunks: Uint8Array[] = []
@@ -61,7 +64,7 @@ async function readCapped(response: Response): Promise<string> {
     total += value.length
     if (total > MAX_RESPONSE) {
       await reader.cancel()
-      throw new ProbeError("bad-response", "response over 64 KB")
+      throw new ProbeError("bad-response", "response over 1 MB")
     }
     chunks.push(value)
   }
@@ -141,6 +144,19 @@ function wsCall(url: string): { call: Call; close: () => void } {
   return { call, close: () => socket.close() }
 }
 
+/** RPC answers are hostile, and a value Arkiv refuses would fail the whole batch of readings it was written with. */
+export function checkedBlock(block: { hash?: unknown; number?: unknown; timestamp?: unknown }) {
+  if (typeof block?.hash !== "string" || !HASH.test(block.hash)) throw new ProbeError("bad-response", "block hash is not a hash")
+  try {
+    const number = BigInt(block.number as string)
+    const time = BigInt(block.timestamp as string)
+    if (number < 0n || number >= 2n ** 64n || time < 0n || time >= 2n ** 64n) throw new Error("out of range")
+    return { hash: block.hash, number, time: Number(time) }
+  } catch {
+    throw new ProbeError("bad-response", "block number or time is not valid")
+  }
+}
+
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0
 
 export async function probe(chainId: bigint, url: string, now = Date.now()): Promise<Reading> {
@@ -173,15 +189,16 @@ export async function probe(chainId: bigint, url: string, now = Date.now()): Pro
     // Pruned nodes refuse block 0 and still serve the head, so this leaves the genesis unknown, not the RPC down.
     try {
       const genesis = await timed<{ hash?: string }>("eth_getBlockByNumber", ["0x0", false])
-      reading.genesisSeen = genesis.hash ?? ""
+      if (typeof genesis?.hash !== "string" || !HASH.test(genesis.hash)) throw new ProbeError("bad-response", "genesis hash is not a hash")
+      reading.genesisSeen = genesis.hash
     } catch (error) {
       const outcome = classify(error).outcome
       if (outcome !== "rpc-error" && outcome !== "bad-response") throw error
     }
-    const latest = await timed<{ hash?: string; number?: string; timestamp?: string }>("eth_getBlockByNumber", ["latest", false])
-    reading.blockHash = latest.hash ?? ""
-    reading.blockNumber = BigInt(latest.number ?? 0)
-    reading.blockTime = Number(BigInt(latest.timestamp ?? 0))
+    const latest = checkedBlock(await timed<{ hash?: string; number?: string; timestamp?: string }>("eth_getBlockByNumber", ["latest", false]))
+    reading.blockHash = latest.hash
+    reading.blockNumber = latest.number
+    reading.blockTime = latest.time
     reading.latencyMs = Math.round(median(times))
     reading.up = true
   } catch (error) {

@@ -5,6 +5,7 @@ import { bool, bytes, dec, i32, str, u64 } from "@arkiv-network/sdk/schema"
 import { Database } from "bun:sqlite"
 import { hexToBytes, type Hex, type LocalAccount } from "viem"
 import { readAll, val } from "./arkiv"
+import { fit } from "./derive"
 import { pool, probeOnline, VERSION, type Reading } from "./probe"
 import { readingText } from "./readings"
 import { Chain, Rpc, RpcHealth, RpcStats } from "./schemas"
@@ -19,6 +20,17 @@ const MAJOR_CHAINS = [1n, 10n, 56n, 100n, 137n, 250n, 324n, 1101n, 5000n, 8453n,
 
 export type Target = { chainId: bigint; url: string }
 
+const MAX_I32 = 2_147_483_647n
+
+/** A hostile head can be any size, and an out-of-range value would fail the batch it is written with. */
+export const lagOf = (head: bigint, block: bigint) => Number(head - block > MAX_I32 ? MAX_I32 : head - block)
+
+/** A repeated RPC record must not be probed twice or get two health entities. */
+export const uniqueTargets = (targets: Target[]) => [...new Map(targets.map((t) => [`${t.chainId}|${t.url}`, t])).values()]
+
+/** What counts towards uptime: an RPC answering for the wrong chain is not up for anyone relying on this list. */
+export const counted = (r: { up: boolean; chainIdOk: boolean; genesis: string }) => r.up && r.chainIdOk && r.genesis !== "bad"
+
 export async function loadTargets(client: any, publisher: string, tier: number, only?: bigint[]): Promise<Target[]> {
   const [chains, rpcs] = await Promise.all([
     readAll<any>(client, { schema: Chain, owner: publisher, select: { chainId: true, status: true } }),
@@ -32,9 +44,9 @@ export async function loadTargets(client: any, publisher: string, tier: number, 
     if (tier === 2) return s !== "deprecated"
     return true
   }
-  return rpcs
+  return uniqueTargets(rpcs
     .filter((r) => !val<boolean>(r.needsApiKey) && wanted(val<bigint>(r.chainId)!))
-    .map((r) => ({ chainId: val<bigint>(r.chainId)!, url: val<string>(r.url)! }))
+    .map((r) => ({ chainId: val<bigint>(r.chainId)!, url: val<string>(r.url)! })))
 }
 
 export function openHistory(path: string) {
@@ -87,7 +99,7 @@ export async function runRound(opts: {
         chainIdOk: r.chainIdOk,
         genesis: !agreed || !r.genesisSeen ? "unknown" : r.genesisSeen === agreed ? "ok" : "bad",
         latencyMs: r.latencyMs,
-        lagBlocks: r.up && r.chainIdOk ? Number(head - r.blockNumber) : -1,
+        lagBlocks: r.up && r.chainIdOk ? lagOf(head, r.blockNumber) : -1,
         checkedAt: BigInt(r.checkedAt),
         blockNumber: r.blockNumber,
         blockHash: r.blockHash,
@@ -98,14 +110,14 @@ export async function runRound(opts: {
         chainId: u64(fields.chainId), url: str(fields.url), region: str(region), up: bool(fields.up), chainIdOk: bool(fields.chainIdOk),
         genesis: str(fields.genesis), latencyMs: i32(fields.latencyMs), lagBlocks: i32(fields.lagBlocks), checkedAt: u64(fields.checkedAt),
         blockNumber: u64(fields.blockNumber), blockHash: str(fields.blockHash), genesisSeen: str(fields.genesisSeen),
-        error: str(r.error), proberVersion: str(VERSION), sig: bytes(hexToBytes(sig as Hex)),
+        error: str(fit(r.error)), proberVersion: str(VERSION), sig: bytes(hexToBytes(sig as Hex)),
       }
       const key = keys.get(`${r.chainId}|${r.url}`)
       if (key) {
         patches.push({ schema: RpcHealth, entityKey: key, set: values })
         extensions.push({ entityKey: key, expiration })
       } else creates.push({ schema: RpcHealth, values, expiration })
-      if (r.outcome !== "rate-limited") insert.run(r.url, id, r.checkedAt, r.up ? 1 : 0, r.latencyMs)
+      if (r.outcome !== "rate-limited") insert.run(r.url, id, r.checkedAt, counted(fields) ? 1 : 0, r.latencyMs)
     }
   }
 
