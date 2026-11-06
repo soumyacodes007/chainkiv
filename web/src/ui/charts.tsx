@@ -1,8 +1,7 @@
 // Hand-built SVG and canvas charts. Thin marks, hairline axes, one tooltip, and every value reachable without hovering.
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { fmt, pct } from "../lib/format"
-import { useStore } from "../lib/store"
 import { cx } from "./kit"
 
 // ---- the one tooltip --------------------------------------------------------------------------------
@@ -203,88 +202,3 @@ export const Dots = ({ tones, max = 16 }: { tones: string[]; max?: number }) => 
     {tones.length > max && <em>+{tones.length - max}</em>}
   </span>
 )
-
-// ---- waffle: every RPC as one square, on canvas because there are thousands --------------------------------------
-
-export type Cell = { color: string; label: string; sub: string; to: string }
-
-export function Waffle({ cells, cell = 9, gap = 2 }: { cells: Cell[]; cell?: number; gap?: number }) {
-  const canvas = useRef<HTMLCanvasElement>(null)
-  const [box, measured] = useWidth<HTMLDivElement>()
-  const width = measured || 800
-  const theme = useStore((s) => s.prefs.theme)
-  const [system, setSystem] = useState(0)
-  useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: dark)")
-    const change = () => setSystem((n) => n + 1)
-    media.addEventListener("change", change)
-    return () => media.removeEventListener("change", change)
-  }, [])
-  if (width < 640) {
-    cell = 6
-    gap = 1
-  }
-  const step = cell + gap
-  const cols = Math.max(1, Math.floor((width + gap) / step))
-  const rows = Math.ceil(cells.length / cols)
-  const height = rows * step
-  useEffect(() => {
-    const c = canvas.current
-    if (!c) return
-    const dpr = devicePixelRatio || 1
-    c.width = width * dpr
-    c.height = height * dpr
-    const g = c.getContext("2d")!
-    g.scale(dpr, dpr)
-    const css = getComputedStyle(c)
-    const cache = new Map<string, string>()
-    const resolve = (v: string) => {
-      if (!v.startsWith("var(")) return v
-      if (!cache.has(v)) cache.set(v, css.getPropertyValue(v.slice(4, -1)).trim())
-      return cache.get(v)!
-    }
-    cells.forEach((x, i) => {
-      g.fillStyle = resolve(x.color)
-      g.beginPath()
-      g.roundRect((i % cols) * step, Math.floor(i / cols) * step, cell, cell, 2)
-      g.fill()
-    })
-  }, [cells, width, height, cols, step, cell, theme, system])
-  const at = (e: { clientX: number; clientY: number }) => {
-    const r = canvas.current!.getBoundingClientRect()
-    const col = Math.floor((e.clientX - r.left) / step)
-    return col < cols ? cells[Math.floor((e.clientY - r.top) / step) * cols + col] : undefined
-  }
-  return (
-    <div ref={box} className="waffle">
-      <canvas
-        ref={canvas}
-        style={{ width, height }}
-        role="img"
-        aria-label={`${fmt(cells.length)} squares, one per RPC. The table below has the same counts.`}
-        onPointerMove={(e) => {
-          const c = at(e)
-          setTip(
-            c
-              ? {
-                  x: e.clientX,
-                  y: e.clientY,
-                  body: (
-                    <>
-                      <TipRow value={c.label} label="" color={c.color} />
-                      <div className="ctip-s">{c.sub}</div>
-                    </>
-                  ),
-                }
-              : null,
-          )
-        }}
-        onPointerLeave={() => setTip(null)}
-        onClick={(e) => {
-          const c = at(e)
-          if (c) location.hash = c.to
-        }}
-      />
-    </div>
-  )
-}

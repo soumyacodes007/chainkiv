@@ -1,11 +1,11 @@
-// The whole list at once: every RPC as one square, why the bad ones fail, and the ones pointing at the wrong chain.
+// The whole list at once: how many pass, why the bad ones fail, and the ones pointing at the wrong chain.
 import { useMemo, useState } from "react"
-import { ago, fmt, hostOf, ms, pct, urlHash } from "../lib/format"
+import { ago, fmt, hostOf, pct, urlHash } from "../lib/format"
 import { assess, GROUPS, groupOf, works } from "../lib/health"
 import { href } from "../lib/router"
 import { useStore } from "../lib/store"
 import { Glyph } from "../ui/chain"
-import { Histogram, Legend, RankBars, Waffle, type Cell, type Part } from "../ui/charts"
+import { Histogram, RankBars, type Part } from "../ui/charts"
 import { I } from "../ui/icons"
 import { Empty, Panel, Seg } from "../ui/kit"
 
@@ -29,7 +29,6 @@ export function Health() {
     const scoped = chains.filter((c) => (kind === "main" ? !c.testnet : kind === "test" ? c.testnet : true))
     const rows = scoped.flatMap((chain) => chain.rpcs.map((rpc) => ({ chain, rpc, a: assess(rpc) })))
     rows.sort((x, y) => GROUPS.indexOf(groupOf(x.a.verdict)) - GROUPS.indexOf(groupOf(y.a.verdict)) || (x.a.latency ?? 9e9) - (y.a.latency ?? 9e9))
-    const cells: Cell[] = rows.map(({ chain, rpc, a }) => ({ color: groupOf(a.verdict).color, label: hostOf(rpc.url).host, sub: `${chain.name} · ${a.label}${a.latency ? ` · ${ms(a.latency)}` : ""}`, to: href(`rpc/${chain.id}/${urlHash(rpc.url)}`) }))
     const parts: Part[] = GROUPS.map((g) => ({ key: g.key, label: g.label, color: g.color, value: rows.filter((r) => groupOf(r.a.verdict) === g).length }))
     const reasons = new Map<string, number>()
     for (const r of rows) {
@@ -48,7 +47,7 @@ export function Health() {
     const noneWork = scopedWith.filter((c) => !c.rpcs.some((r) => works(assess(r).tone)))
     const confirmed = scopedWith.filter((c) => c.rpcs.some((r) => assess(r).tone === "green")).length
     const best = scopedWith.map((c) => ({ c, n: c.rpcs.filter((r) => assess(r).tone === "green").length })).sort((a, b) => b.n - a.n).slice(0, 6)
-    return { rows, cells, parts, reasons: [...reasons.entries()].sort((a, b) => b[1] - a[1]), bins, wrong, scopedWith, noneWork, best, confirmed }
+    return { rows, parts, reasons: [...reasons.entries()].sort((a, b) => b[1] - a[1]), bins, wrong, scopedWith, noneWork, best, confirmed }
   }, [chains, kind])
 
   if (healthFrom === "none")
@@ -106,11 +105,6 @@ export function Health() {
           <span className="d">Answer, but for another network</span>
         </div>
       </div>
-
-      <Panel title="Every listed RPC" sub="One square each, sorted by result. Select one to open it." className="mt">
-        <Waffle cells={data.cells} />
-        <Legend parts={data.parts} />
-      </Panel>
 
       <div className="grid2eq mt">
         <Panel title="Why they don't answer">
