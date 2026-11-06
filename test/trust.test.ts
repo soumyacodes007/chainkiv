@@ -1,3 +1,4 @@
+import { labelOf } from "../src/ens"
 import { describe, expect, test } from "bun:test"
 import { deriveChain, deriveExplorers, deriveRpcs, parseFile } from "../src/derive"
 import { plan, type Existing } from "../src/importer"
@@ -67,6 +68,14 @@ describe("verify", () => {
     const verdict = checkChain(await checkRelease(inputs(raws)), 10n, { raw: raws[1]!, attrs: { ...attrsOf(raws[1]!), status: "active" } })
     expect(verdict.state).toBe("failed")
     expect(verdict.steps.find((s) => s.id === "attributes")!.detail).toContain("status")
+  })
+
+  test("a root on ENS that differs from the anchor fails, even when the anchor is genuine", async () => {
+    const trusted = { publisher: PUBLISHER, source: "test.eth", anchorTx: "0xaa" }
+    const check = await checkRelease(inputs(raws, { publisher: async () => ({ ...trusted, root: `0x${"9".repeat(64)}` }) }))
+    expect(statusOf(check.steps, "anchor")).toBe("fail")
+    const match = await checkRelease(inputs(raws, { publisher: async () => ({ ...trusted, root: merkleRoot(raws.map(leafOf)).toUpperCase().replace("0X", "0x") }) }))
+    expect(statusOf(match.steps, "anchor")).toBe("pass")
   })
 
   test("a release signed by another wallet fails", async () => {
@@ -157,5 +166,13 @@ describe("import plan", () => {
     expect(work.counts.chain!.delete).toBe(1)
     expect(work.counts.rpc!.delete).toBe(1)
     expect(work.counts.explorer!.delete).toBe(1)
+  })
+})
+
+describe("ens", () => {
+  test("only a direct .eth name can be registered", () => {
+    expect(labelOf("ChainRoll.eth")).toBe("chainroll")
+    expect(() => labelOf("a.chainroll.eth")).toThrow("Expected")
+    expect(() => labelOf("chainroll.com")).toThrow("Expected")
   })
 })

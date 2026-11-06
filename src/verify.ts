@@ -19,7 +19,7 @@ export type ReleaseCheck = {
 }
 
 export type ReleaseInputs = {
-  publisher: () => Promise<{ publisher: string; source: string; anchorTx: string }>
+  publisher: () => Promise<{ publisher: string; source: string; anchorTx: string; root?: string }>
   anchor: (tx: string) => Promise<{ anchor: Anchor | null; from: string }>
   manifest: (root: string) => Promise<Uint8Array[]>
   upstream: (commit: string) => Promise<UpstreamResult>
@@ -48,6 +48,7 @@ export async function checkRelease(inputs: ReleaseInputs): Promise<ReleaseCheck>
     const { anchor, from } = await inputs.anchor(trust.anchorTx)
     if (!anchor) out.steps.push(step("anchor", "publisher", "Release signed by the publisher", "fail", "That transaction is not a ChainKiv anchor"))
     else if (!same(from, trust.publisher)) out.steps.push(step("anchor", "publisher", "Release signed by the publisher", "fail", `Signed by ${from}, not the publisher`))
+    else if (trust.root && !same(trust.root, anchor.root)) out.steps.push(step("anchor", "publisher", "Release signed by the publisher", "fail", `${trust.source} names root ${trust.root.slice(0, 12)}…, the anchor says ${anchor.root.slice(0, 12)}…`))
     else {
       out.anchor = anchor
       out.steps.push(step("anchor", "publisher", "Release signed by the publisher", "pass", `Release ${anchor.releaseNo}, transaction ${trust.anchorTx}`))

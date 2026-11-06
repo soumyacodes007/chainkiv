@@ -1,20 +1,26 @@
 #!/usr/bin/env bun
 // chainkiv: import, survey, probe, verify and query. Keys come from the environment and are never printed.
+import { mkdir } from "node:fs/promises"
 import { formatEther, parseEther, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
-import { LOCAL_CHAIN_ID, localNetwork, rabdiNetwork, reader, writer, type Network } from "./arkiv"
+import { str } from "@arkiv-network/sdk/schema"
+import { LOCAL_CHAIN_ID, localNetwork, rabdiNetwork, readAll, reader, val, writer, type Network } from "./arkiv"
 import { CHAINLIST_FILE, CHAINLIST_REPO, hashRows, parseChainlist } from "./chainlist"
 import { planChainlist, readChainlistExisting } from "./chainlist-import"
 import { createRegistry } from "./client"
-import { apply, plan, readExisting, writeRelease } from "./importer"
+import { deployResolver, ensQuote, handOver, registerName, setRecords, setupProbers, type ProberState } from "./ens"
+import { apply, plan, readExisting, withReplan, writeRelease, type Plan } from "./importer"
 import { loadTargets, openHistory, publishStats, runRound } from "./prober"
-import { merkleRoot, type ReleaseMeta } from "./release"
+import { genesisOf, merkleRoot, type ReleaseMeta } from "./release"
+import { Release } from "./schemas"
 import { fetchCommit, leavesOf, readFileAt, readSource } from "./source"
 import { summarise, survey } from "./survey"
 import { ethereumChain, ethereumReader, readAnchor, sendAnchor, trustFromEns } from "./trust"
 
 const DEV_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 const HOME = process.env.CHAINKIV_HOME ?? ".chainkiv"
+/** The ENS records a routine release updates, which is all a hot key should be able to touch. */
+const RELEASE_KEYS = ["arkiv.latestAnchor", "arkiv.root", "arkiv.release", "arkiv.metaHash"]
 
 function args(list: string[]) {
   const flags: Record<string, string> = {}
@@ -96,6 +102,19 @@ async function source(flags: Record<string, string>) {
 
 const replacer = (_: string, v: unknown) => (typeof v === "bigint" ? v.toString() : v)
 const print = (value: unknown) => console.log(JSON.stringify(value, replacer, 2))
+const retryNote = (error: unknown, attempt: number) => console.log(`Write failed (${(error as Error).message.split("\n")[0]}). Re-reading Arkiv, try ${attempt + 1}.`)
+
+/** Runs a plan, and after any failure builds a fresh one from Arkiv, so nothing is written twice. */
+async function applyPlan(first: Plan, replan: () => Promise<Plan>, write: (work: Plan) => Promise<number>) {
+  let next: Plan | undefined = first
+  let batches = 0
+  await withReplan(async () => {
+    const work: Plan = next ?? (await replan())
+    next = undefined
+    batches += await write(work)
+  }, { onRetry: retryNote })
+  return batches
+}
 
 const commands: Record<string, (flags: Record<string, string>, rest: string[]) => Promise<void>> = {
   async "new-wallet"() {
@@ -117,25 +136,36 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     const account = keyFor("PUBLISHER_KEY", net)
     const client = reader(net)
     const wallet = writer(net, account)
-    const head = await client.getBlockNumber()
-    const work = plan(src, await readExisting(client, account.address), head)
+    const fresh = async () => plan(src, await readExisting(client, account.address), await client.getBlockNumber())
+    const work = await fresh()
     print(work.counts)
     if (flags["dry-run"]) return
 
-    const batches = await apply(wallet, work, Number(flags.batch ?? 20), (done, total) => {
-      if (done % 10 === 0 || done === total) console.log(`Batch ${done}/${total}, ${Math.round((Date.now() - started) / 1000)}s`)
-    })
     const anchorOn = flags.anchor ?? "none"
+    const meta = anchorOn === "none" ? undefined : await loadMeta(flags.meta)
+    // Checked before any write: apps trust only the probers named here, so an empty list would hide every reading.
+    if (meta && !meta.probers.length) throw new Error("No probers to sign into this release. Set CHAINKIV_PROBERS or use --meta.")
+
+    const batches = await applyPlan(work, fresh, (next) => apply(wallet, next, Number(flags.batch ?? 20), (done, total) => {
+      if (done % 10 === 0 || done === total) console.log(`Batch ${done}/${total}, ${Math.round((Date.now() - started) / 1000)}s`)
+    }))
     let anchorTx: string | undefined
-    if (anchorOn !== "none") {
-      const meta = await loadMeta(flags.meta)
-      const release = await writeRelease(client, wallet, account.address, src, meta, anchorOn)
+    if (meta) {
+      const release = await withReplan(() => writeRelease(client, wallet, account.address, src, meta, anchorOn), { onRetry: retryNote })
       const anchor = { releaseNo: release.releaseNo.toString(), commit: src.commit, root: release.root, chainCount: release.chainCount, metaHash: release.metaHash }
       anchorTx = net.chain.id === LOCAL_CHAIN_ID
         ? await sendAnchor(net.chain, net.url, account, anchor)
         : await sendAnchor(ethereumChain(anchorOn), process.env.ETH_RPC_URL, account, anchor)
       console.log(`Anchored release ${anchor.releaseNo} on ${anchorOn}: ${anchorTx}`)
-      console.log("Set the ENS text record arkiv.latestAnchor to this transaction hash.")
+      // The anchor is already on Ethereum, so a failure here must not hide the hash above.
+      try {
+        const rows = await readAll<any>(client, { schema: Release, owner: account.address, select: { releaseNo: true } })
+        const row = rows.find((r) => val<bigint>(r.releaseNo) === BigInt(anchor.releaseNo))
+        if (row) await wallet.patchEntity(Release, row.$key, { set: { anchorTx: str(anchorTx) } })
+      } catch (error) {
+        console.log(`Could not save the anchor on the release record: ${(error as Error).message.split("\n")[0]}`)
+      }
+      console.log(`Now run ens-records --anchor ${anchorTx}. Until then Verify fails, because ENS still names the old root.`)
     }
     print({ publisher: account.address, batches, anchorTx, seconds: Math.round((Date.now() - started) / 1000) })
   },
@@ -148,12 +178,14 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     const net = network()
     const account = keyFor("PUBLISHER_KEY", net)
     const client = reader(net)
-    const work = planChainlist(list, commit, await readChainlistExisting(client, account.address), await client.getBlockNumber())
+    const fresh = async () => planChainlist(list, commit, await readChainlistExisting(client, account.address), await client.getBlockNumber())
+    const work = await fresh()
     print(work.counts)
     if (flags["dry-run"]) return
-    await apply(writer(net, account), work, Number(flags.batch ?? 20), (done, total) => {
+    const wallet = writer(net, account)
+    await applyPlan(work, fresh, (next) => apply(wallet, next, Number(flags.batch ?? 20), (done, total) => {
       if (done % 10 === 0 || done === total) console.log(`Batch ${done}/${total}`)
-    })
+    }))
     await Bun.write(`${HOME}/chainlist.json`, JSON.stringify({ commit, hash: hashRows(list), count: list.rpcs.length }))
     console.log("Done. The next anchored release will cover this data.")
   },
@@ -167,23 +199,42 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     process.exit(0)
   },
 
+  /** Writes the signed-release facts that do not come from git: the prober list and the agreed first blocks. */
+  async "release-meta"(flags) {
+    const probers = (process.env.CHAINKIV_PROBERS ?? "").split(",").map((p) => p.trim()).filter(Boolean)
+    if (!probers.length) throw new Error("Set CHAINKIV_PROBERS to the prober addresses, separated by commas")
+    const saved = (await Bun.file(flags.survey ?? `${HOME}/survey.json`).json()) as { genesis: Record<string, { hash: string | null }> }
+    const genesis = genesisOf(saved.genesis)
+    const path = flags.out ?? `${HOME}/meta.json`
+    await Bun.write(path, JSON.stringify({ probers, genesis }))
+    console.log(`Wrote ${path}: ${probers.length} probers, agreed first blocks for ${Object.keys(genesis).length} chains`)
+  },
+
   async probe(flags) {
     const net = network()
     const account = keyFor("PROBER_KEY", net)
     const reg = registry(net)
     const client = reader(net)
     const wallet = writer(net, account)
-    const publisher = (await reg.trust()).publisher
+    const publisher = flags.publisher ?? (await reg.trust()).publisher
+    await mkdir(HOME, { recursive: true })
     const history = openHistory(`${HOME}/prober-${account.address.slice(2, 10)}.db`)
     const only = flags.chains?.split(",").map((id) => BigInt(id))
     const everySeconds = Number(flags.every ?? 0)
     const region = flags.region ?? process.env.PROBER_REGION ?? "unknown"
     for (let round = 1; ; round++) {
-      const targets = await loadTargets(client, publisher, Number(flags.tier ?? 1), only)
-      const meta = await reg.meta().catch(() => null)
-      const result = await runRound({ client, wallet, account, region, targets, genesis: meta?.genesis ?? {}, history })
-      console.log(`Round ${round}: ${result.up}/${result.probed} up, ${result.created} created, ${result.patched} patched, ${result.seconds}s`)
-      if (flags.stats || round % 6 === 1) console.log(`Stats written for ${await publishStats({ client, wallet, account, targets, history })} RPCs`)
+      try {
+        const targets = await loadTargets(client, publisher, Number(flags.tier ?? 1), only)
+        // A new registry each round, because one caches the release and this loop outlives it.
+        const meta = await registry(net).meta().catch(() => null)
+        const result = await runRound({ client, wallet, account, region, targets, genesis: meta?.genesis ?? {}, history })
+        console.log(`Round ${round}: ${result.up}/${result.probed} up, ${result.created} created, ${result.patched} patched, ${result.seconds}s`)
+        if (flags.stats || round % 6 === 1) console.log(`Stats written for ${await publishStats({ client, wallet, account, targets, history })} RPCs`)
+      } catch (error) {
+        // A one-off run should fail loudly. A daemon should survive, or every reading it published expires.
+        if (!everySeconds) throw error
+        console.error(`Round ${round} failed: ${(error as Error).message.split("\n")[0]}`)
+      }
       if (!everySeconds) return
       await Bun.sleep(everySeconds * 1000)
     }
@@ -231,14 +282,16 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     print(await response.json())
   },
 
-  /** Moves testnet tGLM from the publisher to this project's own prober wallets. Nothing else is accepted as a target. */
+  /** Moves testnet tGLM between this project's own wallets. Nothing else is accepted as a target. */
   async "fund-probers"(flags) {
     const net = network()
-    const publisher = keyFor("PUBLISHER_KEY", net)
+    const fromProber = flags.from === "prober-a"
+    if (flags.from && !fromProber) throw new Error("--from only accepts prober-a")
+    const payer = keyFor(fromProber ? "PROBER_KEY" : "PUBLISHER_KEY", net)
     const amount = parseEther(flags.amount ?? "1")
     const client = reader(net)
-    const wallet = writer(net, publisher)
-    for (const name of ["PROBER_KEY", "PROBER_B_KEY"]) {
+    const wallet = writer(net, payer)
+    for (const name of fromProber ? ["PROBER_B_KEY"] : ["PROBER_KEY", "PROBER_B_KEY"]) {
       const target = keyFor(name, net).address
       console.log(`${flags["dry-run"] ? "Would send" : "Sending"} ${formatEther(amount)} tGLM to ${name.replace("_KEY", "")} ${target}`)
       if (flags["dry-run"]) continue
@@ -246,7 +299,74 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
       await client.waitForTransactionReceipt({ hash })
       console.log(`Done: ${hash}`)
     }
-    console.log(`Publisher balance ${formatEther(await client.getBalance({ address: publisher.address }))} tGLM`)
+    console.log(`${fromProber ? "Prober A" : "Publisher"} balance ${formatEther(await client.getBalance({ address: payer.address }))} tGLM`)
+  },
+
+  /** Sepolia only: the fee is free MockUSDC. The resolver is saved so a rerun does not deploy a second one. */
+  async "ens-register"(flags) {
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    const name = flags.name ?? process.env.ENS_NAME
+    if (!name) throw new Error("Pass --name chainroll.eth or set ENS_NAME")
+    if ((process.env.ETH_NETWORK ?? "sepolia") !== "sepolia") throw new Error("ens-register only runs on Sepolia")
+    const url = process.env.ETH_RPC_URL
+    const quote = await ensQuote(url, account, name)
+    console.log(`${name}: ${quote.available ? `available, ${Number(quote.total) / 1e6} MockUSDC for 1 year` : "not available"}`)
+    if (flags["dry-run"] || !quote.available) return
+    const saved = Bun.file(`${HOME}/ens.json`)
+    const state = (await saved.exists()) ? await saved.json() : {}
+    state.resolver ??= await deployResolver(url, account)
+    await Bun.write(saved, JSON.stringify(state))
+    console.log(`Resolver ${state.resolver}`)
+    await registerName(url, account, name, state.resolver, console.log)
+    await Bun.write(saved, JSON.stringify({ ...state, name }))
+    console.log(`Registered ${name} to ${account.address}`)
+  },
+
+  async "ens-records"(flags) {
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    if (!flags.anchor) throw new Error("Pass --anchor <transaction hash>")
+    const { name, resolver, ens } = await Bun.file(`${HOME}/ens.json`).json()
+    if (!name || !resolver) throw new Error("Run ens-register first")
+    // The root is copied from the anchor itself, so this cannot name a release that was never signed.
+    const eth = ethereumReader(ethereumChain(process.env.ETH_NETWORK ?? "sepolia"), process.env.ETH_RPC_URL)
+    const { anchor } = await readAnchor(eth, flags.anchor as Hex)
+    if (!anchor) throw new Error("That transaction is not a ChainKiv anchor")
+    const names = Object.keys((ens as ProberState | undefined)?.probers ?? {}).map((label) => `${label}.probers.${name}`)
+    const release = { "arkiv.latestAnchor": flags.anchor, "arkiv.root": anchor.root, "arkiv.release": anchor.releaseNo, "arkiv.metaHash": anchor.metaHash }
+    // After a handover this key may only write the release records, so --release sends nothing else.
+    const records = flags.release ? release : {
+      ...release, "arkiv.publisher": account.address, "arkiv.chainId": String(net.chain.id),
+      ...(names.length ? { "arkiv.probers": names.join(",") } : {}),
+    }
+    print(await setRecords(process.env.ETH_RPC_URL, account, name, resolver, records))
+  },
+
+  /** Gives each prober a subname: a.probers.<name>. Records nothing on Arkiv and changes no existing ENS record. */
+  async "ens-probers"() {
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    const saved = await Bun.file(`${HOME}/ens.json`).json()
+    if (!saved.name || !saved.resolver) throw new Error("Run ens-register first")
+    const addresses = (process.env.CHAINKIV_PROBERS ?? "").split(",").map((p) => p.trim()).filter(Boolean)
+    if (!addresses.length) throw new Error("Set CHAINKIV_PROBERS")
+    const probers = addresses.map((address, i) => ({ label: String.fromCharCode(97 + i), address: address as Hex }))
+    const save = (ens: ProberState) => Bun.write(`${HOME}/ens.json`, JSON.stringify({ ...saved, ens })).then(() => undefined)
+    print(await setupProbers(process.env.ETH_RPC_URL, account, saved.name, saved.resolver, probers, saved.ens ?? {}, save, console.log))
+    console.log("Now run ens-records --anchor <tx> to list them in arkiv.probers.")
+  },
+
+  /** Moves the name to a cold wallet or multisig, leaving this key only the records a release changes. */
+  async "ens-handover"(flags) {
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    const { name, resolver, ens } = await Bun.file(`${HOME}/ens.json`).json()
+    if (!flags.to) throw new Error("Pass --to <address of the new owner>")
+    // This cannot be undone from this key, so the name has to be typed out.
+    if (flags.confirm !== name) throw new Error(`This gives up control of ${name}. Add --confirm ${name} once you hold the key for ${flags.to}.`)
+    const registries = [ens?.nameRegistry, ens?.proberRegistry].filter(Boolean)
+    await handOver(process.env.ETH_RPC_URL, account, name, resolver, registries, flags.to as Hex, RELEASE_KEYS, console.log)
   },
 
   async doctor() {
@@ -279,12 +399,17 @@ if (!command) {
   import    --commit <sha> [--repo dir] [--dry-run] [--root-only] [--anchor sepolia|mainnet|none] [--meta file]
   import-chainlist [--commit sha] [--repo dir] [--dry-run]
   survey    Probe every listed RPC, read-only, no wallet needed
-  probe     --tier 1|2|3 [--chains 1,8453] [--every seconds] [--region name]
+  release-meta [--survey file] [--out file]   Write the prober list and agreed first blocks for --meta
+  probe     --tier 1|2|3 [--chains 1,8453] [--every seconds] [--region name] [--publisher address]
   verify    <chainId> | --all | --chainlist
   chain     <chainId>
   query     '<arkiv query>'
   doctor    Check network, wallets and the publisher lookup
-  fund-probers --amount 1 [--dry-run]
+  fund-probers --amount 1 [--from prober-a] [--dry-run]
+  ens-register --name chainroll.eth [--dry-run]   Sepolia only
+  ens-records --anchor <tx> [--release]           --release writes only what a hot key may
+  ens-probers                                     Give each prober a subname
+  ens-handover --to <address> --confirm <name>    Move the name to a cold wallet
   new-wallet`)
   process.exit(name === "help" ? 0 : 1)
 }
