@@ -58,6 +58,17 @@ export type Existing = {
 
 const id = (chainId: bigint, url: string) => `${chainId}|${url}`
 
+/** Keeps the first row for each identity and returns the rest, so a repeated record is seen and removed, not hidden. */
+export function splitDuplicates<T>(rows: T[], idOf: (row: T) => string) {
+  const first = new Map<string, T>()
+  const extras: T[] = []
+  for (const row of rows) {
+    if (first.has(idOf(row))) extras.push(row)
+    else first.set(idOf(row), row)
+  }
+  return { first, extras }
+}
+
 export async function readExisting(client: any, owner: string): Promise<Existing> {
   const [chains, rpcs, explorers] = await Promise.all([
     readAll(client, { schema: Chain, owner, select: { chainId: true, sourceBlob: true, $expiresAt: true } }),
@@ -76,10 +87,10 @@ export function plan(source: Source, existing: Existing, head: bigint): Plan {
   const out: Plan = { creates: [], patches: [], extensions: [], deletes: [], counts: { chain: tally(), rpc: tally(), explorer: tally() } }
   const expiration = (days: number) => ExpirationTime.fromDays(days)
 
-  const chains = new Map(existing.chains.map((c) => [c.chainId, c]))
+  const { first: chains, extras: spareChains } = splitDuplicates(existing.chains, (c) => c.chainId.toString())
   for (const c of source.chains) {
-    const old = chains.get(c.attrs.chainId)
-    chains.delete(c.attrs.chainId)
+    const old = chains.get(c.attrs.chainId.toString())
+    chains.delete(c.attrs.chainId.toString())
     if (!old) {
       out.creates.push({ schema: Chain, values: chainValues(c, source.commit), expiration: expiration(CORE_DAYS) })
       out.counts.chain!.create++
@@ -92,13 +103,13 @@ export function plan(source: Source, existing: Existing, head: bigint): Plan {
       out.counts.chain!.extend++
     } else out.counts.chain!.same++
   }
-  for (const old of chains.values()) {
+  for (const old of [...chains.values(), ...spareChains]) {
     out.deletes.push({ entityKey: old.key })
     out.counts.chain!.delete++
   }
 
   const sync = (name: "rpc" | "explorer", wanted: Map<string, { schema: unknown; values: object }>, have: Existing["rpcs"]) => {
-    const left = new Map(have.map((e) => [e.id, e]))
+    const { first: left, extras } = splitDuplicates(have, (e) => e.id)
     for (const [key, item] of wanted) {
       const old = left.get(key)
       left.delete(key)
@@ -110,7 +121,7 @@ export function plan(source: Source, existing: Existing, head: bigint): Plan {
         out.counts[name]!.extend++
       } else out.counts[name]!.same++
     }
-    for (const old of left.values()) {
+    for (const old of [...left.values(), ...extras]) {
       out.deletes.push({ entityKey: old.key })
       out.counts[name]!.delete++
     }
@@ -139,13 +150,18 @@ export function plan(source: Source, existing: Existing, head: bigint): Plan {
 
 const chunk = <T>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size))
 
-async function send(wallet: any, batch: object, attempts = 5) {
+/**
+ * Runs a write step and, if it fails, waits and runs it again from a fresh read of Arkiv. A failed write can still have
+ * landed, for example when only the receipt timed out, so resending the same batch would write it twice.
+ */
+export async function withReplan<T>(run: () => Promise<T>, { attempts = 5, settleMs = 20_000, onRetry }: { attempts?: number; settleMs?: number; onRetry?: (error: unknown, attempt: number) => void } = {}): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await wallet.executeBatch(batch)
+      return await run()
     } catch (error) {
       if (attempt >= attempts) throw error
-      await Bun.sleep(1000 * 2 ** attempt)
+      onRetry?.(error, attempt)
+      await Bun.sleep(settleMs * attempt)
     }
   }
 }
@@ -160,7 +176,7 @@ export async function apply(wallet: any, work: Plan, batchSize: number, onProgre
   ]
   let done = 0
   for (const step of steps) {
-    await send(wallet, step)
+    await wallet.executeBatch(step)
     onProgress?.(++done, steps.length)
   }
   return steps.length
@@ -187,10 +203,10 @@ export async function writeRelease(client: any, wallet: any, owner: string, sour
   const have = new Set(written.map((r) => val<number>(r.part)))
   for (const [part, data] of parts.entries()) {
     if (have.has(part)) continue
-    await send(wallet, { creates: [{ schema: Manifest, values: { merkleRoot: str(root), part: i32(part), parts: i32(parts.length), data: bytes(data) }, expiration }] })
+    await wallet.executeBatch({ creates: [{ schema: Manifest, values: { merkleRoot: str(root), part: i32(part), parts: i32(parts.length), data: bytes(data) }, expiration }] })
   }
   const metas = await readAll(client, { schema: MetaSchema, owner, where: eq("metaHash", str(hash)), select: { metaHash: true } })
-  await send(wallet, {
+  await wallet.executeBatch({
     creates: [
       ...(metas.length ? [] : [{ schema: MetaSchema, values: { metaHash: str(hash), data: bytes(encodedMeta) }, expiration }]),
       {

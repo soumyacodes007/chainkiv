@@ -4,7 +4,7 @@ import { ExpirationTime } from "@arkiv-network/sdk"
 import { bool, bytes, str, u64 } from "@arkiv-network/sdk/schema"
 import { readAll, val } from "./arkiv"
 import { CHAINLIST_LICENCE, CHAINLIST_NAME, policyHash, type Chainlist } from "./chainlist"
-import { EXT_DAYS, type Plan } from "./importer"
+import { EXT_DAYS, splitDuplicates, type Plan } from "./importer"
 import { PrivacyPolicy, Rpc, RpcPrivacy } from "./schemas"
 
 const RENEW_BLOCKS = 15n * 43_200n
@@ -42,7 +42,7 @@ export function planChainlist(list: Chainlist, commit: string, existing: Chainli
   const stamp = { source: str(CHAINLIST_NAME), sourceCommit: str(commit), licence: str(CHAINLIST_LICENCE) }
   const soon = (expiresAt: bigint) => expiresAt - head < RENEW_BLOCKS
 
-  const policies = new Map(existing.policies.map((p) => [p.policyKey, p]))
+  const { first: policies, extras: sparePolicies } = splitDuplicates(existing.policies, (p) => p.policyKey)
   for (const [policyKey, value] of list.policies) {
     const old = policies.get(policyKey)
     policies.delete(policyKey)
@@ -60,18 +60,21 @@ export function planChainlist(list: Chainlist, commit: string, existing: Chainli
       out.counts.policy!.extend++
     } else out.counts.policy!.same++
   }
-  for (const old of policies.values()) {
+  for (const old of [...policies.values(), ...sparePolicies]) {
     out.deletes.push({ entityKey: old.key })
     out.counts.policy!.delete++
   }
 
-  const rpcs = new Map(existing.rpcs.map((r) => [r.id, r]))
-  const privacy = new Map(existing.privacy.map((r) => [r.id, r]))
+  const { first: rpcs, extras: spareRpcs } = splitDuplicates(existing.rpcs, (r) => r.id)
+  const { first: privacy, extras: sparePrivacy } = splitDuplicates(existing.privacy, (r) => r.id)
   for (const r of list.rpcs) {
     const key = id(r.chainId, r.url)
     const oldRpc = rpcs.get(key)
     rpcs.delete(key)
-    if (!existing.listed.has(key)) {
+    if (existing.listed.has(key)) {
+      // Upstream has since listed this URL, so our Chainlist copy of it would be a second record.
+      if (oldRpc) spareRpcs.push(oldRpc)
+    } else {
       if (!oldRpc) {
         out.creates.push({
           schema: Rpc,
@@ -100,11 +103,11 @@ export function planChainlist(list: Chainlist, commit: string, existing: Chainli
       out.counts.privacy!.extend++
     } else out.counts.privacy!.same++
   }
-  for (const old of rpcs.values()) {
+  for (const old of [...rpcs.values(), ...spareRpcs]) {
     out.deletes.push({ entityKey: old.key })
     out.counts.rpc!.delete++
   }
-  for (const old of privacy.values()) {
+  for (const old of [...privacy.values(), ...sparePrivacy]) {
     out.deletes.push({ entityKey: old.key })
     out.counts.privacy!.delete++
   }

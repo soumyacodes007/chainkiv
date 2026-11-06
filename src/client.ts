@@ -10,7 +10,8 @@ import type { Anchor, ReleaseMeta } from "./release"
 import { Chain, Explorer, Manifest, PrivacyPolicy, Release, ReleaseMeta as MetaSchema, Rpc, RpcHealth, RpcPrivacy, RpcStats } from "./schemas"
 import { checkChain, checkRelease, upstreamFromGitHub, type ReleaseCheck, type ReleaseInputs, type Verdict } from "./verify"
 
-export type Trust = { publisher: string; anchorTx: string; source: string }
+export type Prober = { name: string; address: string }
+export type Trust = { publisher: string; anchorTx: string; source: string; root?: string; probers?: Prober[] }
 
 export type RegistryOptions = {
   network: Network
@@ -68,7 +69,12 @@ export function createRegistry(options: RegistryOptions) {
   let releaseCache: Promise<ReleaseCheck> | undefined
   let metaCache: Promise<ReleaseMeta | null> | undefined
 
-  const trust = () => (trustCache ??= options.trust())
+  // A failed read isn't remembered, or a brief outage would last until the page reloads.
+  const trust = () =>
+    (trustCache ??= options.trust().catch((e) => {
+      trustCache = undefined
+      throw e
+    }))
   const owner = async () => (await trust()).publisher
 
   async function manifest(root: string): Promise<Uint8Array[]> {
@@ -100,6 +106,12 @@ export function createRegistry(options: RegistryOptions) {
       }
       return null
     })())
+
+  /** ENS names the probers when it can, so one can be added or removed at once. Otherwise the signed release does. */
+  const probers = async (): Promise<Prober[]> => {
+    const named = (await trust()).probers
+    return named?.length ? named : ((await meta())?.probers ?? []).map((address) => ({ name: "", address }))
+  }
 
   async function getChain(chainId: bigint): Promise<ChainDetail | null> {
     const rows = await readAll<any>(client, { schema: Chain, owner: await owner(), where: eq("chainId", u64(chainId)) })
@@ -162,7 +174,7 @@ export function createRegistry(options: RegistryOptions) {
 
   /** One query per prober. A reading counts only if its signature recovers to that prober. */
   async function health(chainId: bigint): Promise<Health[]> {
-    const trusted = (await meta())?.probers ?? []
+    const trusted = (await probers()).map((p) => p.address)
     const lists = await Promise.all(trusted.map(async (prober) => {
       const rows = await readAll<any>(client, { schema: RpcHealth, owner: prober, where: eq("chainId", u64(chainId)) })
       const checked = await Promise.all(rows.map(async (r) => {
@@ -186,7 +198,7 @@ export function createRegistry(options: RegistryOptions) {
     const now = Date.now() / 1000
     const passing = new Map<string, Health[]>()
     for (const h of readings) {
-      if (!h.up || !h.chainIdOk || h.genesis === "bad" || now - h.checkedAt > maxAgeSeconds) continue
+      if (!h.up || !h.chainIdOk || h.genesis !== "ok" || now - h.checkedAt > maxAgeSeconds) continue
       if (!passing.has(h.url)) passing.set(h.url, [])
       passing.get(h.url)!.push(h)
     }
@@ -197,7 +209,7 @@ export function createRegistry(options: RegistryOptions) {
   }
 
   async function stats(chainId: bigint, url?: string): Promise<Stats[]> {
-    const trusted = (await meta())?.probers ?? []
+    const trusted = (await probers()).map((p) => p.address)
     const where = url ? and(eq("chainId", u64(chainId)), eq("url", str(url))) : eq("chainId", u64(chainId))
     const lists = await Promise.all(trusted.map(async (prober) => {
       const rows = await readAll<any>(client, { schema: RpcStats, owner: prober, where })
@@ -236,13 +248,13 @@ export function createRegistry(options: RegistryOptions) {
   const latestRelease = async () => (await release()).anchor ?? null
   const releases = async () => {
     const rows = await readAll<any>(client, { schema: Release, owner: await owner() })
-    return rows.map((r) => ({ releaseNo: val<bigint>(r.releaseNo)!, commit: val<string>(r.commit)!, root: val<string>(r.merkleRoot)!, chainCount: val<bigint>(r.chainCount)!, anchorNetwork: val<string>(r.anchorNetwork)! }))
+    return rows.map((r) => ({ releaseNo: val<bigint>(r.releaseNo)!, commit: val<string>(r.commit)!, root: val<string>(r.merkleRoot)!, chainCount: val<bigint>(r.chainCount)!, anchorNetwork: val<string>(r.anchorNetwork)!, anchorTx: val<string>(r.anchorTx) }))
       .sort((a, b) => (a.releaseNo < b.releaseNo ? 1 : -1))
   }
 
   const toChainsJson = async () => (await everyChain()).map((c) => c.file).sort((a, b) => a.chainId - b.chainId)
 
-  return { client, trust, release, meta, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
+  return { client, trust, release, meta, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
 }
 
 export { readingText }

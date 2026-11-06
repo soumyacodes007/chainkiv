@@ -66,6 +66,10 @@ export function decodeManifest(parts: Uint8Array[]): Leaf[] {
 export type ChainlistRef = { commit: string; hash: string; count: number }
 export type ReleaseMeta = { v: 1; probers: string[]; genesis: Record<string, string>; chainlist?: ChainlistRef }
 
+/** The agreed first blocks from a survey. A chain with no agreement is left out, so it stays unknown. */
+export const genesisOf = (votes: Record<string, { hash: string | null }>): Record<string, string> =>
+  Object.fromEntries(Object.entries(votes).flatMap(([id, vote]) => (vote.hash ? [[id, vote.hash]] : [])))
+
 export function encodeMeta(meta: ReleaseMeta): Uint8Array {
   const genesis = Object.fromEntries(Object.entries(meta.genesis).sort(([a], [b]) => (BigInt(a) < BigInt(b) ? -1 : 1)))
   const probers = [...meta.probers].map((p) => p.toLowerCase()).sort()
