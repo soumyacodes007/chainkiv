@@ -86,7 +86,7 @@ export function Submit() {
           </span>
           <div className="grow">
             <h2>Your proposal is on Arkiv</h2>
-            <p>The validator checks it within minutes. It stays in the unreviewed area and expires in 14 days unless it's taken up.</p>
+            <p>The automatic validator isn't running yet, so it stays in the unreviewed area and expires in 14 days unless it's taken up.</p>
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
               <a className="btn btn-primary btn-sm" href={href("proposals")}>
                 See proposals

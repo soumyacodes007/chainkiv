@@ -25,7 +25,7 @@ export function Proposals() {
       <div className="ph">
         <div>
           <h1>Proposals</h1>
-          <p>Add a chain or an RPC without a GitHub account. An automatic check runs within minutes, and the list only changes through the upstream maintainers.</p>
+          <p>Add a chain or an RPC without a GitHub account. The automatic validator isn't running yet, so proposals stay unreviewed, and the list only changes through the upstream maintainers.</p>
         </div>
         <div className="acts">
           <a className="btn btn-primary" href={href("proposals/new")}>
