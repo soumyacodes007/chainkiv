@@ -150,6 +150,13 @@ const index = (chains: ChainRow[]) => new Map(chains.map((c) => [c.id, c]))
 async function loadLive(expected: number, attempt = 1): Promise<void> {
   if (!hasPublisher) return set({ arkiv: { state: "no-publisher" } })
   try {
+    // Reading every record is over a hundred requests. When the signed release is the commit this copy was built from,
+    // the list can't differ, so visitors keep their quota for what changes: signed readings and the pages they open.
+    const signed = await reg.latestRelease().catch(() => null)
+    if (signed && signed.commit === state.survey?.commit && signed.chainCount === state.chains.length) {
+      set({ source: "arkiv", arkiv: { state: "live", found: state.chains.length } })
+      return void loadProbers(state.chains)
+    }
     const chains = await readDirectory((found) => set({ arkiv: { state: "checking", found } }))
     // Live only once Arkiv holds at least everything the cached copy does, RPCs included.
     const count = (list: ChainRow[]) => list.reduce((n, c) => n + c.rpcs.length, 0)
@@ -177,16 +184,21 @@ async function loadLive(expected: number, attempt = 1): Promise<void> {
   }
 }
 
-/** Pulls signed readings for active chains once the anchored prober list exists. */
+/** Pulls every signed reading once the anchored prober list exists. */
 async function loadProbers(chains: ChainRow[]) {
   const named = await reg.probers().catch(() => [])
   if (!named.length) return
   set({ healthFrom: "probers" })
-  for (const c of chains.filter((x) => x.status === "active" && x.rpcs.length)) {
-    const readings = await reg.health(BigInt(c.id)).catch(() => [])
+  const readings = await reg.allHealth().catch(() => [])
+  const byRpc = new Map<string, typeof readings>()
+  for (const h of readings) {
+    const id = `${h.chainId}|${h.url}`
+    byRpc.set(id, [...(byRpc.get(id) ?? []), h])
+  }
+  for (const c of chains) {
     for (const r of c.rpcs) {
-      const mine = readings.filter((h) => h.url === r.url)
-      if (mine.length) r.readings = mine.map((h) => ({ ...h, blockNumber: String(h.blockNumber) }))
+      const mine = byRpc.get(`${c.id}|${r.url}`)
+      if (mine) r.readings = mine.map((h) => ({ ...h, blockNumber: String(h.blockNumber) }))
     }
   }
   set({ chains: [...chains], rollup: rollupOf(chains) })

@@ -148,7 +148,7 @@ function Numbers() {
             <b>{pct(rollup.green, rollup.total)}</b>
             <span className="d">
               {fmt(rollup.green)} of {fmt(rollup.total)}
-              {survey ? " · last survey" : " · live"}
+              {healthFrom === "probers" ? " · signed readings" : survey ? " · last survey" : " · live"}
             </span>
           </>
         )}

@@ -27,6 +27,7 @@ export type RpcRow = { url: string; protocol: string; needsApiKey: boolean; orig
 export type ExplorerRow = { name: string; url: string; standard: string }
 
 export type Health = {
+  chainId: bigint
   prober: string
   url: string
   region: string
@@ -172,14 +173,14 @@ export function createRegistry(options: RegistryOptions) {
     return { ok, detail: ok ? `${rows.length} rows match Chainlist commit ${signed.commit.slice(0, 10)}` : `Holds ${rows.length} rows, signed for ${signed.count}, or a row was changed` }
   }
 
-  /** One query per prober. A reading counts only if its signature recovers to that prober. */
-  async function health(chainId: bigint): Promise<Health[]> {
+  /** A reading counts only if its signature recovers to that prober. */
+  async function readHealth(where?: ReturnType<typeof eq>): Promise<Health[]> {
     const trusted = (await probers()).map((p) => p.address)
     const lists = await Promise.all(trusted.map(async (prober) => {
-      const rows = await readAll<any>(client, { schema: RpcHealth, owner: prober, where: eq("chainId", u64(chainId)) })
+      const rows = await readAll<any>(client, { schema: RpcHealth, owner: prober, where })
       const checked = await Promise.all(rows.map(async (r) => {
         const fields = {
-          chainId, url: val<string>(r.url)!, up: val<boolean>(r.up)!, chainIdOk: val<boolean>(r.chainIdOk)!, genesis: val<string>(r.genesis)!,
+          chainId: val<bigint>(r.chainId)!, url: val<string>(r.url)!, up: val<boolean>(r.up)!, chainIdOk: val<boolean>(r.chainIdOk)!, genesis: val<string>(r.genesis)!,
           latencyMs: val<number>(r.latencyMs)!, lagBlocks: val<number>(r.lagBlocks)!, checkedAt: val<bigint>(r.checkedAt)!,
           blockNumber: val<bigint>(r.blockNumber)!, blockHash: val<string>(r.blockHash)!, genesisSeen: val<string>(r.genesisSeen)!,
         }
@@ -192,6 +193,10 @@ export function createRegistry(options: RegistryOptions) {
     }))
     return lists.flat()
   }
+
+  const health = (chainId: bigint) => readHealth(eq("chainId", u64(chainId)))
+  /** Every reading from every prober, in a few pages: one query per chain would cost a site visitor hundreds of requests. */
+  const allHealth = () => readHealth()
 
   async function healthyRpcs(chainId: bigint, { minProbers = 1, maxLatencyMs = Infinity, maxAgeSeconds = 1800 } = {}) {
     const readings = await health(chainId)
@@ -254,7 +259,7 @@ export function createRegistry(options: RegistryOptions) {
 
   const toChainsJson = async () => (await everyChain()).map((c) => c.file).sort((a, b) => a.chainId - b.chainId)
 
-  return { client, trust, release, meta, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
+  return { client, trust, release, meta, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, allHealth, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
 }
 
 export { readingText }

@@ -7,6 +7,7 @@ import { mainnet, sepolia } from "viem/chains"
 import { readAll, val, type Network } from "../../../src/arkiv"
 import { createRegistry, type Registry, type Trust } from "../../../src/client"
 import { Chain, Explorer, Proposal, Review, Rpc } from "../../../src/schemas"
+import { upstreamFromGitHub } from "../../../src/verify"
 import { readAnchor, trustFromEns } from "../../../src/trust"
 import type { Step, Verdict } from "../../../src/verify"
 import type { ChainRow, ExplorerRow, RpcRow } from "./types"
@@ -48,9 +49,24 @@ async function trust(): Promise<Trust> {
   return { publisher: PUBLISHER, anchorTx: ANCHOR_TX ?? "", source: "this site's settings" }
 }
 
+/** GitHub allows 60 calls an hour per network without a login, and a commit on main stays there, so each browser asks once. */
+async function upstream(commit: string) {
+  const key = `chainkiv.upstream.${commit}`
+  try {
+    const saved = localStorage.getItem(key)
+    if (saved) return JSON.parse(saved) as Awaited<ReturnType<typeof upstreamFromGitHub>>
+  } catch {}
+  const result = await upstreamFromGitHub(commit)
+  try {
+    if (result.onMain) localStorage.setItem(key, JSON.stringify(result))
+  } catch {}
+  return result
+}
+
 export const reg: Registry = createRegistry({
   network,
   trust,
+  upstream,
   readAnchor: async (tx) => {
     if (!tx) throw new Error("No release has been anchored on Ethereum yet")
     return readAnchor(ethereum, tx as `0x${string}`).catch(() => readAnchor(second, tx as `0x${string}`))
