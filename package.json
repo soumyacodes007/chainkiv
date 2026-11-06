@@ -1,0 +1,33 @@
+{
+  "name": "chainkiv",
+  "version": "0.1.0",
+  "description": "The EthereumLists chain registry on Arkiv: queryable, verifiable, with live RPC evidence.",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "chainkiv": "./src/cli.ts" },
+  "scripts": {
+    "cli": "bun run --conditions browser src/cli.ts",
+    "test": "bun test --conditions browser test",
+    "typecheck": "tsc --noEmit",
+    "web:dev": "vite --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts"
+  },
+  "engines": { "bun": ">=1.3.14" },
+  "dependencies": {
+    "@arkiv-network/sdk": "1.0.1",
+    "@noble/hashes": "1.8.0",
+    "@openzeppelin/merkle-tree": "1.0.8",
+    "viem": "2.57.16"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "lucide-react": "0.460.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "5.9.3",
+    "vite": "6.4.1"
+  }
+}
