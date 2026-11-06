@@ -7,7 +7,7 @@ import { href } from "../lib/router"
 import { togglePin, useStore } from "../lib/store"
 import { useChain } from "../lib/useChain"
 import { addToWallet } from "../lib/wallet"
-import { Glyph, HealthPill, LayerTag, TrustBadge } from "../ui/chain"
+import { Glyph, HealthPill } from "../ui/chain"
 import { hover, Legend, SegBar, TipRow, type Part } from "../ui/charts"
 import { I } from "../ui/icons"
 import { Code, Empty, Panel, Seg, toast } from "../ui/kit"
@@ -192,8 +192,6 @@ export function ChainPage({ id }: { id: string }) {
         <div className="grow" style={{ minWidth: 0 }}>
           <h1>{chain.name}</h1>
           <div className="chh-m">
-            <TrustBadge />
-            <LayerTag c={chain} />
             {chain.status !== "unset" && <span className="tag">{chain.status}</span>}
             {chain.reused && (
               <span className="badge amber">
