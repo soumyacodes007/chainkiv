@@ -34,6 +34,8 @@ export async function fetchCommit(dir: string, ref: string, url = UPSTREAM): Pro
   return new TextDecoder().decode(await git(dir, ["rev-parse", "FETCH_HEAD"])).trim()
 }
 
+export const readFileAt = async (dir: string, commit: string, path: string) => new TextDecoder().decode(await git(dir, ["show", `${commit}:${path}`]))
+
 async function readBlobs(dir: string, ids: string[]): Promise<Map<string, Uint8Array>> {
   const out = await git(dir, ["cat-file", "--batch"], ids.join("\n") + "\n")
   const blobs = new Map<string, Uint8Array>()

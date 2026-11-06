@@ -16,6 +16,8 @@ entities with the same schema, and they are ignored.
 | `chainkiv.release` | Publisher | 90 days | `releaseNo*` u64, `commit*`, `merkleRoot*` str, `chainCount` u64, `metaHash`, `anchorNetwork`, `anchorTx` str |
 | `chainkiv.manifest` | Publisher | 90 days | `merkleRoot*` str, `part*`, `parts` i32, `data` bytes |
 | `chainkiv.releaseMeta` | Publisher | 90 days | `metaHash*` str, `data` bytes |
+| `chainkiv.rpcPrivacy` | Publisher | 30 days, renewed under 15 | `chainId*` u64, `url*`, `tracking*`, `policyKey*`, `source`, `sourceCommit`, `licence` str |
+| `chainkiv.privacyPolicy` | Publisher | 30 days, renewed under 15 | `policyKey*`, `policyHash*`, `source`, `sourceCommit`, `licence` str, `text` bytes |
 | `chainkiv.proposal` | Anyone | 14 days | `kind*` str, `targetChainId*` u64, `shortName*`, `note` str, `raw` bytes |
 | `chainkiv.review` | Validator | 14 days | `proposalKey*` key, `verdict*` str, `targetChainId*` u64, `reasons` str |
 
@@ -29,6 +31,7 @@ entities with the same schema, and they are ignored.
 | Chains using a currency | `nativeSymbol` |
 | Red-flagged chains | `reusedChainId` |
 | RPCs of a chain | `chainId` on `chainkiv.rpc` |
+| RPCs by tracking label | `tracking`, `chainId` on `chainkiv.rpcPrivacy` |
 | RPCs passing checks | `chainId`, `up`, `chainIdOk`, `$owner`, sorted by `latencyMs` |
 
 ## Why these expiries

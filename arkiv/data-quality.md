@@ -14,6 +14,34 @@ Source: `ethereum-lists/chains` at commit `e17474286275730fb6b0490b1d7ea1c64a36e
 | Same root from two clones with different line-ending settings | Yes: `0x7b0b0d24…8b9ebc`, though the files on disk differ in size |
 | Second import at the same commit | 0 creates, 0 patches, 0 deletes |
 
+## On Rabdi
+
+| Check | Result |
+|---|---|
+| Records written | 9,610: 2,855 chains, 4,219 RPCs, 2,536 explorers |
+| Second run at the same commit | All 9,610 unchanged, so nothing was duplicated |
+| Cost | About 2.6 tGLM |
+| Time | About 46 minutes for the last 2,015 chains and all RPCs and explorers, at 20 records per transaction |
+
+## Chainlist
+
+From `DefiLlama/chainlist` at commit `759ad92f70043da439b935a68371cec45f87a05c` (5 Nov 2026), GPL-3.0.
+
+| Check | Result |
+|---|---|
+| Unique RPC URLs | 2,848 across 973 chains |
+| Reported as not tracking | 788 |
+| Reported as limited tracking | 1,035 |
+| Reported as tracking | 202 |
+| No label | 823 |
+| Privacy statements | 158 |
+| Already in ethereum-lists | 717 |
+| New URLs | 2,131 |
+| URLs for chains not in ethereum-lists | 29 |
+
+The labels are reported by Chainlist and the providers. We have not checked them, and the new URLs were not part of
+the RPC survey below.
+
 ## Verification
 
 Run on a private `arkiv-reth` v1.0.1 chain with the full data. The anchor was on that chain and the publisher came
@@ -69,7 +97,6 @@ Reproduce: `chainkiv survey`, then `spike/survey-report.ts`.
 
 ## Not measured yet
 
-- The full import on Rabdi, which is still running
 - Sync lag from an upstream commit to Arkiv
 - Freshness of health readings on Rabdi
 - A survey from a second location

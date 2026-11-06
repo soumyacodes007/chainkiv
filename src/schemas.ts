@@ -102,3 +102,22 @@ export const Review = defineSchema("chainkiv.review", {
   targetChainId: u64().indexed(),
   reasons: str(),
 })
+
+export const RpcPrivacy = defineSchema("chainkiv.rpcPrivacy", {
+  chainId: u64().indexed(),
+  url: str().indexed(),
+  tracking: str().indexed(),
+  policyKey: str().indexed(),
+  source: str(),
+  sourceCommit: str(),
+  licence: str(),
+})
+
+export const PrivacyPolicy = defineSchema("chainkiv.privacyPolicy", {
+  policyKey: str().indexed(),
+  policyHash: str().indexed(),
+  source: str(),
+  sourceCommit: str(),
+  licence: str(),
+  text: bytes(),
+})

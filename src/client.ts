@@ -3,10 +3,11 @@ import { and, eq, gte, lte, startsWith } from "@arkiv-network/sdk/query"
 import { bool, str, u64 } from "@arkiv-network/sdk/schema"
 import { keccak256, type Hex } from "viem"
 import { reader, readAll, toBytes, val, type Network } from "./arkiv"
+import { chainlistHash, policyHash } from "./chainlist"
 import { parseFile, type ChainFile } from "./derive"
 import { readingText, signerOf } from "./readings"
 import type { Anchor, ReleaseMeta } from "./release"
-import { Chain, Explorer, Manifest, Release, ReleaseMeta as MetaSchema, Rpc, RpcHealth, RpcStats } from "./schemas"
+import { Chain, Explorer, Manifest, PrivacyPolicy, Release, ReleaseMeta as MetaSchema, Rpc, RpcHealth, RpcPrivacy, RpcStats } from "./schemas"
 import { checkChain, checkRelease, upstreamFromGitHub, type ReleaseCheck, type ReleaseInputs, type Verdict } from "./verify"
 
 export type Trust = { publisher: string; anchorTx: string; source: string }
@@ -39,6 +40,9 @@ export type Health = {
   genesisSeen: string
   error: string
 }
+
+/** What Chainlist reports about an RPC. It comes from Chainlist and the providers, and ChainKiv does not check it. */
+export type Privacy = { url: string; tracking: string; policyKey: string; source: string; sourceCommit: string; licence: string }
 
 export type Stats = { prober: string; url: string; uptime24h: number; uptime7d: number; p50Ms: number; p95Ms: number; samples24h: number }
 
@@ -131,6 +135,31 @@ export function createRegistry(options: RegistryOptions) {
     return rows.map((r) => ({ name: val(r.name)!, url: val(r.url)!, standard: val(r.standard)! }))
   }
 
+  async function privacy(chainId: bigint): Promise<Privacy[]> {
+    const rows = await readAll<any>(client, { schema: RpcPrivacy, owner: await owner(), where: eq("chainId", u64(chainId)) })
+    return rows.map((r) => ({ url: val(r.url)!, tracking: val(r.tracking)!, policyKey: val(r.policyKey)!, source: val(r.source)!, sourceCommit: val(r.sourceCommit)!, licence: val(r.licence)! }))
+  }
+
+  async function policy(policyKey: string): Promise<string | null> {
+    const rows = await readAll<any>(client, { schema: PrivacyPolicy, owner: await owner(), where: eq("policyKey", str(policyKey)) })
+    return rows[0] ? new TextDecoder().decode(toBytes(val(rows[0].text))) : null
+  }
+
+  /** Rebuilds the hash of every Chainlist row and compares it with the signed release. */
+  async function verifyChainlist() {
+    const signed = (await meta())?.chainlist
+    if (!signed) return { ok: false, detail: "The signed release does not cover Chainlist data" }
+    const publisher = await owner()
+    const [rows, policies] = await Promise.all([
+      readAll<any>(client, { schema: RpcPrivacy, owner: publisher }),
+      readAll<any>(client, { schema: PrivacyPolicy, owner: publisher }),
+    ])
+    const hashes = new Map(policies.map((p) => [val<string>(p.policyKey)!, policyHash(new TextDecoder().decode(toBytes(val(p.text))))]))
+    const hash = chainlistHash(rows.map((r) => ({ chainId: val<bigint>(r.chainId)!, url: val<string>(r.url)!, tracking: val<string>(r.tracking)!, policy: val<string>(r.policyKey) ? (hashes.get(val<string>(r.policyKey)!) ?? "missing") : "" })))
+    const ok = hash === signed.hash && rows.length === signed.count
+    return { ok, detail: ok ? `${rows.length} rows match Chainlist commit ${signed.commit.slice(0, 10)}` : `Holds ${rows.length} rows, signed for ${signed.count}, or a row was changed` }
+  }
+
   /** One query per prober. A reading counts only if its signature recovers to that prober. */
   async function health(chainId: bigint): Promise<Health[]> {
     const trusted = (await meta())?.probers ?? []
@@ -213,7 +242,7 @@ export function createRegistry(options: RegistryOptions) {
 
   const toChainsJson = async () => (await everyChain()).map((c) => c.file).sort((a, b) => a.chainId - b.chainId)
 
-  return { client, trust, release, meta, getChain, findChains, rpcs, explorers, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
+  return { client, trust, release, meta, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
 }
 
 export { readingText }

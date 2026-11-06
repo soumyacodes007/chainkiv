@@ -66,7 +66,7 @@ export async function readExisting(client: any, owner: string): Promise<Existing
   ])
   return {
     chains: chains.map((r: any) => ({ key: r.$key, chainId: val<bigint>(r.chainId)!, blob: val<string>(r.sourceBlob)!, expiresAt: BigInt(r.$expiresAt) })),
-    rpcs: rpcs.map((r: any) => ({ key: r.$key, id: id(val<bigint>(r.chainId)!, val<string>(r.url)!), expiresAt: BigInt(r.$expiresAt) })),
+    rpcs: rpcs.filter((r: any) => val(r.origin) === "list").map((r: any) => ({ key: r.$key, id: id(val<bigint>(r.chainId)!, val<string>(r.url)!), expiresAt: BigInt(r.$expiresAt) })),
     explorers: explorers.map((r: any) => ({ key: r.$key, id: id(val<bigint>(r.chainId)!, val<string>(r.url)!), expiresAt: BigInt(r.$expiresAt) })),
   }
 }

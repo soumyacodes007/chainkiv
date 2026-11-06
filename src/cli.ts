@@ -3,11 +3,13 @@
 import { formatEther, parseEther, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { LOCAL_CHAIN_ID, localNetwork, rabdiNetwork, reader, writer, type Network } from "./arkiv"
+import { CHAINLIST_FILE, CHAINLIST_REPO, hashRows, parseChainlist } from "./chainlist"
+import { planChainlist, readChainlistExisting } from "./chainlist-import"
 import { createRegistry } from "./client"
 import { apply, plan, readExisting, writeRelease } from "./importer"
 import { loadTargets, openHistory, publishStats, runRound } from "./prober"
 import { merkleRoot, type ReleaseMeta } from "./release"
-import { fetchCommit, leavesOf, readSource } from "./source"
+import { fetchCommit, leavesOf, readFileAt, readSource } from "./source"
 import { summarise, survey } from "./survey"
 import { ethereumChain, ethereumReader, readAnchor, sendAnchor, trustFromEns } from "./trust"
 
@@ -78,9 +80,12 @@ function registry(net: Network) {
 
 async function loadMeta(path: string | undefined): Promise<ReleaseMeta> {
   const probers = (process.env.CHAINKIV_PROBERS ?? "").split(",").map((p) => p.trim()).filter(Boolean)
-  if (!path) return { v: 1, probers, genesis: {} }
+  const ref = Bun.file(`${HOME}/chainlist.json`)
+  const chainlist = (await ref.exists()) ? ((await ref.json()) as ReleaseMeta["chainlist"]) : undefined
+  const base = { v: 1 as const, ...(chainlist ? { chainlist } : {}) }
+  if (!path) return { ...base, probers, genesis: {} }
   const file = (await Bun.file(path).json()) as Partial<ReleaseMeta>
-  return { v: 1, probers: file.probers ?? probers, genesis: file.genesis ?? {} }
+  return { ...base, probers: file.probers ?? probers, genesis: file.genesis ?? {} }
 }
 
 async function source(flags: Record<string, string>) {
@@ -135,6 +140,24 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     print({ publisher: account.address, batches, anchorTx, seconds: Math.round((Date.now() - started) / 1000) })
   },
 
+  async "import-chainlist"(flags) {
+    const dir = flags.repo ?? `${HOME}/chainlist`
+    const commit = flags.repo && flags.commit ? flags.commit : await fetchCommit(dir, flags.commit ?? "HEAD", CHAINLIST_REPO)
+    const list = parseChainlist(await readFileAt(dir, commit, CHAINLIST_FILE))
+    console.log(`Chainlist commit ${commit}\nRPCs ${list.rpcs.length}\nPolicies ${list.policies.size}\nWarnings ${list.warnings.length}`)
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    const client = reader(net)
+    const work = planChainlist(list, commit, await readChainlistExisting(client, account.address), await client.getBlockNumber())
+    print(work.counts)
+    if (flags["dry-run"]) return
+    await apply(writer(net, account), work, Number(flags.batch ?? 20), (done, total) => {
+      if (done % 10 === 0 || done === total) console.log(`Batch ${done}/${total}`)
+    })
+    await Bun.write(`${HOME}/chainlist.json`, JSON.stringify({ commit, hash: hashRows(list), count: list.rpcs.length }))
+    console.log("Done. The next anchored release will cover this data.")
+  },
+
   async survey(flags) {
     const src = await source(flags)
     const started = Date.now()
@@ -168,6 +191,12 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
 
   async verify(flags, rest) {
     const reg = registry(network())
+    if (flags.chainlist) {
+      const result = await reg.verifyChainlist()
+      console.log(`${result.ok ? "pass" : "fail"}     Chainlist data: ${result.detail}`)
+      if (!result.ok) process.exitCode = 1
+      return
+    }
     if (flags.all) {
       const { check, results, missing, verified } = await reg.verifyAll()
       for (const s of check.steps) console.log(`${s.status.padEnd(8)} ${s.label}: ${s.detail}`)
@@ -197,7 +226,7 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     const response = await fetch(net.url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "arkiv_query", params: [rest[0], { includeData: { attributes: true, key: true } }] }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "arkiv_query", params: [rest[0], { select: { key: true, owner: true, attributes: { chainId: true, name: true, shortName: true, url: true, status: true } }, limit: "0x14" }] }),
     })
     print(await response.json())
   },
@@ -248,9 +277,10 @@ if (!command) {
   console.log(`chainkiv <command>
 
   import    --commit <sha> [--repo dir] [--dry-run] [--root-only] [--anchor sepolia|mainnet|none] [--meta file]
+  import-chainlist [--commit sha] [--repo dir] [--dry-run]
   survey    Probe every listed RPC, read-only, no wallet needed
   probe     --tier 1|2|3 [--chains 1,8453] [--every seconds] [--region name]
-  verify    <chainId> | --all
+  verify    <chainId> | --all | --chainlist
   chain     <chainId>
   query     '<arkiv query>'
   doctor    Check network, wallets and the publisher lookup
