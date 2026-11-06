@@ -40,7 +40,7 @@ export function verdictOf(r: Reading, agreed: string | null): Verdict {
   if (r.outcome === "rate-limited") return "rate-limited"
   if (r.reportedChainId !== null && !r.chainIdOk) return "wrong-chain"
   if (!r.up) return "down"
-  if (agreed && r.genesisSeen !== agreed) return "wrong-genesis"
+  if (agreed && r.genesisSeen && r.genesisSeen !== agreed) return "wrong-genesis"
   if (r.blockTime && r.checkedAt - r.blockTime > STALE_SECONDS) return "stale"
   return "passed"
 }

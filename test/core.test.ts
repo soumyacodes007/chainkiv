@@ -3,6 +3,8 @@ import { deriveChain, deriveExplorers, deriveRpcs, fit, gitBlobId, parseFile, va
 import { buildTree, decodeAnchor, decodeManifest, encodeAnchor, encodeManifest, encodeMeta, merkleRoot, metaHash, proveLeaf, type Leaf } from "../src/release"
 import { isPrivateAddress, pool } from "../src/probe"
 import { readingText, signerOf } from "../src/readings"
+import { agreeGenesis, verdictOf } from "../src/survey"
+import type { Reading } from "../src/probe"
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts"
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
@@ -130,5 +132,30 @@ describe("probe", () => {
     const sig = await account.signMessage({ message: readingText(fields) })
     expect(await signerOf(fields, sig)).toBe(account.address)
     expect(await signerOf({ ...fields, up: false }, sig)).not.toBe(account.address)
+  })
+})
+
+describe("survey", () => {
+  const reading = (change: Partial<Reading>): Reading => ({
+    chainId: 1n, url: "https://a.example", up: true, chainIdOk: true, reportedChainId: "1", genesisSeen: "0xaa", blockNumber: 5n, blockHash: "0xbb",
+    blockTime: 1000, latencyMs: 10, outcome: "ok", error: "", checkedAt: 1010, ...change,
+  })
+
+  test("a pruned RPC with no genesis answer is not a wrong genesis", () => {
+    expect(verdictOf(reading({ genesisSeen: "" }), "0xaa")).toBe("passed")
+    expect(verdictOf(reading({ genesisSeen: "0xcc" }), "0xaa")).toBe("wrong-genesis")
+  })
+
+  test("a right ID on a dead head is stale, and a wrong ID wins over down", () => {
+    expect(verdictOf(reading({ blockTime: 1, checkedAt: 100000 }), null)).toBe("stale")
+    expect(verdictOf(reading({ up: false, chainIdOk: false, reportedChainId: "2", outcome: "timeout" }), null)).toBe("wrong-chain")
+  })
+
+  test("genesis needs two hosts and a clear winner", () => {
+    const at = (url: string, genesisSeen: string) => reading({ url, genesisSeen })
+    expect(agreeGenesis([at("https://a.x", "0x1")]).hash).toBeNull()
+    expect(agreeGenesis([at("https://a.x/1", "0x1"), at("https://a.x/2", "0x1")]).hash).toBeNull()
+    expect(agreeGenesis([at("https://a.x", "0x1"), at("https://b.x", "0x1"), at("https://c.x", "0x2")]).hash).toBe("0x1")
+    expect(agreeGenesis([at("https://a.x", "0x1"), at("https://b.x", "0x1"), at("https://c.x", "0x2"), at("https://d.x", "0x2")]).hash).toBeNull()
   })
 })
