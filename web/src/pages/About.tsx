@@ -31,7 +31,7 @@ export function About() {
     reg.probers().then(setProbers, () => setProbers([]))
   }, [])
   const fresh: [string, string, string][] = [
-    ["Chain records", source === "arkiv" ? `Live on Arkiv, ${fmt(chains.length)} networks` : arkiv.state === "importing" ? `Import running, ${fmt(arkiv.found ?? 0)} on Arkiv so far` : `Cached copy${snapshotAt ? `, ${ago(Date.parse(snapshotAt) / 1000)}` : ""}`, source === "arkiv" ? "green" : "amber"],
+    ["Chain records", source === "arkiv" ? `Matches the signed release, ${fmt(chains.length)} networks` : arkiv.state === "importing" ? `Import running, ${fmt(arkiv.found ?? 0)} on Arkiv so far` : `Cached copy${snapshotAt ? `, ${ago(Date.parse(snapshotAt) / 1000)}` : ""}`, source === "arkiv" ? "green" : "amber"],
     ["RPC health", survey ? `One survey, ${ago(Date.parse(survey.at) / 1000)}` : probers?.length ? "Signed prober readings" : "First survey running", survey || probers?.length ? "amber" : "gray"],
     ["Latest release", release.anchor ? `Release ${release.anchor.releaseNo}, on ${ETH_NETWORK}` : "None signed yet", release.anchor ? "green" : "gray"],
     ["Publisher", publisherName ? `Named by ${publisherName}` : hasPublisher ? "Set in this site's settings" : "Not configured yet", publisherName ? "green" : hasPublisher ? "amber" : "gray"],
@@ -41,7 +41,7 @@ export function About() {
       <div className="ph">
         <div>
           <h1>How it works</h1>
-          <p>GitHub gives you a flat list you have to trust. ChainKiv shows where each record came from, who published it, and which RPCs pass live checks.</p>
+          <p>GitHub gives you a flat list you have to trust. Chainroll shows where each record came from, who published it, and which RPCs pass live checks.</p>
         </div>
       </div>
       <div className="grid3">
@@ -96,13 +96,13 @@ export function About() {
             ))
           ) : (
             <div className="panel-b">
-              <Empty sm icon="radio" title="Named in the first release" text="In this version both probers are run by the ChainKiv team, so they aren't independent yet." />
+              <Empty sm icon="radio" title="Named in the first release" text="In this version both probers are run by the Chainroll team, so they aren't independent yet." />
             </div>
           )}
         </Panel>
         <Panel title="Honest limits">
           <div className="checks">
-            {["In this version the publisher is the ChainKiv team, not the EthereumLists maintainers. They haven't agreed to take over yet", "Green means passed checks, never safe", "Arkiv nodes can hide health rows, though they can't fake them", "This runs on a testnet, and a reset would mean re-importing"].map((t) => (
+            {["In this version the publisher is the Chainroll team, not the EthereumLists maintainers. They haven't agreed to take over yet", "Green means passed checks, never safe", "Arkiv nodes can hide health rows, though they can't fake them", "This runs on a testnet, and a reset would mean re-importing"].map((t) => (
               <div key={t} className="c warn">
                 <I n="info" s={14} />
                 {t}

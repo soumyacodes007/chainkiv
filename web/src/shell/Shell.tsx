@@ -1,4 +1,4 @@
-// The gr8r shell: sidebar, top bar and mobile bottom bar, with ChainKiv's navigation.
+// The gr8r shell: sidebar, top bar and mobile bottom bar, with Chainroll's navigation.
 import { useEffect, type MouseEvent, type ReactNode } from "react"
 import { ago, fmt, short, UPSTREAM } from "../lib/format"
 import { getState, setPrefs, setUi, setWallet, useStore } from "../lib/store"
@@ -46,7 +46,7 @@ function Sidebar() {
         <div className="row" style={{ gap: 2 }}>
           <a className="ws grow" href={href("")}>
             <Mark />
-            <span className="ws-name trunc">ChainKiv</span>
+            <span className="ws-name trunc">Chainroll</span>
           </a>
           {!ui.collapsed && (
             <button className="ibtn ibtn-sm hide-m" onClick={() => setUi({ collapsed: true })} data-tip="Collapse sidebar" aria-label="Collapse sidebar">
@@ -120,7 +120,7 @@ function SourcePill() {
   const { source, arkiv, snapshotAt, healthFrom } = useStore()
   const age = snapshotAt ? ago(Date.parse(snapshotAt) / 1000) : ""
   const map: Record<string, [string, string, string, boolean]> = {
-    live: ["Live on Arkiv", "var(--green)", healthFrom === "probers" ? "Chains and RPCs read from Arkiv, health from signed readings" : "Chains and RPCs read from Arkiv. Health is from the last survey", true],
+    live: ["Live on Arkiv", "var(--green)", healthFrom === "probers" ? "List matches the signed release on Arkiv, health from signed readings" : "Chains and RPCs read from Arkiv. Health is from the last survey", true],
     checking: ["Reading Arkiv", "var(--amber)", "Looking for the publisher's records", false],
     importing: [arkiv.found ? `Import ${fmt(arkiv.found)} so far` : "Import running", "var(--amber)", `The publisher's records are still being written. Showing the cached copy from ${age}`, false],
     "no-publisher": ["Cached copy", "var(--text-4)", `No publisher configured yet. Copy from ${age}`, false],
@@ -269,7 +269,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const route = useRoute()
   const name = useStore((s) => s.byId.get(route.params.id ?? route.params.chainId ?? "")?.name)
   useEffect(() => {
-    document.title = `${name ?? ROUTES[route.name]?.[0] ?? "ChainKiv"} · ChainKiv`
+    document.title = `${name ?? ROUTES[route.name]?.[0] ?? "Chainroll"} · Chainroll`
   }, [name, route.name])
   const { arkiv, source, snapshotAt } = useStore()
   return (

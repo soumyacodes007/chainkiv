@@ -130,7 +130,7 @@ export function Verify({ id }: { id: string }) {
       <div className="demopub">
         <I n="signature" s={15} />
         <span>
-          <b>Signed by demo publisher.</b> In this version the key is the ChainKiv team's, {publisherName ? `named by ${publisherName}` : "not the EthereumLists maintainers'"}. They can take over later by pointing the ENS name at their own key, and no app has to change.
+          <b>Signed by demo publisher.</b> In this version the key is the Chainroll team's, {publisherName ? `named by ${publisherName}` : "not the EthereumLists maintainers'"}. They can take over later by pointing the ENS name at their own key, and no app has to change.
         </span>
         {anchorTx && (
           <a className="lnk" href={`${ETH_EXPLORER}/tx/${anchorTx}`} target="_blank" rel="noreferrer">

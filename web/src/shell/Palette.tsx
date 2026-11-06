@@ -116,7 +116,7 @@ export function Palette() {
             <kbd>↵</kbd>open
           </span>
           <span className="sp" style={{ flex: 1 }} />
-          <span className="faint">ChainKiv</span>
+          <span className="faint">Chainroll</span>
         </div>
       </div>
     </>,
