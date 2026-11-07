@@ -1,6 +1,7 @@
 // The "one more click" page: one RPC, in plain words first, with the evidence underneath and a Recheck anyone can run.
 import { useEffect, useState } from "react"
 import { ago, fmt, hostOf, ms, short, urlHash } from "../lib/format"
+import { isStaleHead } from "../../../src/readings"
 import { assess, wasCalled } from "../lib/health"
 import { recheck, type Recheck } from "../lib/recheck"
 import { reg } from "../lib/registry"
