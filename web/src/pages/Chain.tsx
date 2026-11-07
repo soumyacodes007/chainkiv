@@ -1,16 +1,17 @@
 // A network's page: is it real, how do I connect, and which of its RPCs work right now.
 import { useMemo, useState } from "react"
-import { toHex } from "viem"
 import { ago, hostOf, ms, pct, plural, urlHash } from "../lib/format"
-import { assess, bestRpcs, toneVar } from "../lib/health"
+import { assess, toneVar } from "../lib/health"
 import { href } from "../lib/router"
 import { togglePin, useStore } from "../lib/store"
 import { useChain } from "../lib/useChain"
-import { addToWallet } from "../lib/wallet"
+import { useVerdict } from "../lib/useVerdict"
+import { AddWallet } from "../ui/addWallet"
 import { Glyph, HealthPill } from "../ui/chain"
 import { hover, Legend, SegBar, TipRow, type Part } from "../ui/charts"
 import { I } from "../ui/icons"
-import { Code, Empty, Panel, Seg, toast } from "../ui/kit"
+import { Code, Empty, Panel, Seg } from "../ui/kit"
+import { TrustBox } from "../ui/trust"
 
 function RpcList({ view }: { view: NonNullable<ReturnType<typeof useChain>["view"]> }) {
   const { chain, rpcs } = view
@@ -123,38 +124,11 @@ function Family({ id }: { id: string }) {
   )
 }
 
-function Connect({ view }: { view: NonNullable<ReturnType<typeof useChain>["view"]> }) {
-  const { chain, rpcs, explorers, file } = view
-  const good = bestRpcs(rpcs)
-  const reason = !rpcs.length ? "This network lists no RPCs" : !good.length ? "No listed RPC has passed every check yet" : ""
-  const add = async () => {
-    try {
-      await addToWallet({
-        chainId: toHex(BigInt(chain.id)),
-        chainName: chain.name,
-        nativeCurrency: file?.nativeCurrency,
-        rpcUrls: good.map((g) => g.rpc.url).slice(0, 4),
-        blockExplorerUrls: explorers.map((e) => e.url).slice(0, 1),
-      })
-      toast(`${chain.name} added to your wallet`)
-    } catch (e) {
-      toast((e as Error).message.split("\n")[0]!.slice(0, 120), { kind: "err" })
-    }
-  }
-  return (
-    <span data-tip={reason || undefined}>
-      <button className="btn btn-primary" disabled={!!reason} onClick={add}>
-        <I n="wallet" s={14} />
-        Add to wallet
-      </button>
-    </span>
-  )
-}
-
 const FEATURE_NAMES: Record<string, string> = { EIP155: "Replay protection", EIP1559: "Modern fees", EIP4844: "Blobs", EIP7702: "Smart accounts" }
 
 export function ChainPage({ id }: { id: string }) {
   const { view } = useChain(id)
+  const check = useVerdict(view ? id : "")
   const pins = useStore((s) => s.prefs.pins)
   const healthFrom = useStore((s) => s.healthFrom)
   const [raw, setRaw] = useState(false)
@@ -211,11 +185,7 @@ export function ChainPage({ id }: { id: string }) {
           <button className="ibtn" onClick={() => togglePin(chain.id)} data-tip={pinned ? "Unpin" : "Pin to sidebar"} aria-label={pinned ? "Unpin" : "Pin"}>
             <I n={pinned ? "pin-off" : "pin"} s={15} />
           </button>
-          <a className="btn btn-secondary" href={href(`verify/${chain.id}`)}>
-            <I n="shield-check" s={14} />
-            Verify
-          </a>
-          <Connect view={view} />
+          <AddWallet c={{ ...chain, rpcs, explorers, file }} primary />
         </div>
       </header>
 
@@ -264,15 +234,7 @@ export function ChainPage({ id }: { id: string }) {
           )}
         </div>
         <div className="stack">
-          <Panel title="Can you trust this record?" className="trustp">
-            <p className="muted" style={{ margin: "0 0 12px", fontSize: "var(--fs-sm)", lineHeight: 1.5 }}>
-              Run seven checks from your own browser, ending at a signature on Ethereum.
-            </p>
-            <a className="btn btn-primary btn-block" href={href(`verify/${chain.id}`)}>
-              <I n="shield-check" s={14} />
-              Check this record
-            </a>
-          </Panel>
+          <TrustBox chain={chain} check={check} />
           {rpcs.length > 0 && healthFrom !== "none" && (
             <Panel title="RPC health">
               <SegBar parts={parts} />

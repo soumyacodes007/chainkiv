@@ -3,6 +3,7 @@ import { href } from "../lib/router"
 import { assess, toneVar, type Assessment } from "../lib/health"
 import { useStore } from "../lib/store"
 import type { ChainRow } from "../lib/types"
+import { AddWallet } from "./addWallet"
 import { Dots, hover, TipRow } from "./charts"
 import { I } from "./icons"
 import { cx } from "./kit"
@@ -34,7 +35,7 @@ export function Glyph({ chain, size = 36 }: { chain: Pick<ChainRow, "id" | "name
           <stop offset="1" stopColor={`hsl(${(hue + 46) % 360} 58% ${chain.testnet ? 54 : 40}%)`} />
         </linearGradient>
         <clipPath id={`${id}c`}>
-          <rect width="40" height="40" rx="10.5" />
+          <circle cx="20" cy="20" r="20" />
         </clipPath>
       </defs>
       <g clipPath={`url(#${id}c)`}>
@@ -55,6 +56,7 @@ export function Glyph({ chain, size = 36 }: { chain: Pick<ChainRow, "id" | "name
 export function TrustBadge({ state }: { state?: string }) {
   const source = useStore((s) => s.source)
   const known: Record<string, [string, string, string, string]> = {
+    checking: ["gray", "loader", "Checking…", "Running the checks in this browser"],
     verified: ["green", "badge-check", "Verified", "All seven checks pass on the latest anchored release"],
     pending: ["amber", "hourglass", "Pending anchor", "Newer than the latest release signed on Ethereum"],
     failed: ["red", "shield-alert", "Unverified", "Not publisher-owned, or a check failed"],
@@ -92,22 +94,25 @@ export function ChainCard({ c }: { c: ChainRow }) {
   const passing = tones.filter((t) => t.tone === "green").length
   const best = Math.min(...tones.filter((t) => t.tone === "green" && t.latency).map((t) => t.latency!))
   return (
-    <a className="ccd" href={href(`chain/${c.id}`)}>
-      <div className="ccd-h">
-        <Glyph chain={c} size={38} />
-        <div className="grow" style={{ minWidth: 0 }}>
-          <div className="ccd-n trunc">{c.name}</div>
-          <div className="ccd-s trunc">
-            <span className="num">{c.id}</span> · {c.symbol || "no token"}
+    <div className="ccd">
+      <a className="ccd-l" href={href(`chain/${c.id}`)}>
+        <div className="ccd-h">
+          <Glyph chain={c} size={38} />
+          <div className="grow" style={{ minWidth: 0 }}>
+            <div className="ccd-n trunc">{c.name}</div>
+            <div className="ccd-s trunc">
+              <span className="num">{c.id}</span> · {c.symbol || "no token"}
+            </div>
           </div>
+          {c.reused && <I n="triangle-alert" s={15} style={{ color: "var(--amber)" }} />}
         </div>
-        {c.reused && <I n="triangle-alert" s={15} style={{ color: "var(--amber)" }} />}
-      </div>
-      <div className="ccd-f">
-        <Dots tones={tones.map((t) => toneVar(t.tone))} max={14} />
-        <span className="sp" />
-        <span className="ccd-m">{!c.rpcs.length ? "No RPCs listed" : healthFrom === "none" ? `${c.rpcs.length} RPC${c.rpcs.length > 1 ? "s" : ""}` : `${passing} of ${c.rpcs.length} pass${isFinite(best) ? ` · ${Math.round(best)} ms` : ""}`}</span>
-      </div>
-    </a>
+        <div className="ccd-f">
+          <Dots tones={tones.map((t) => toneVar(t.tone))} max={14} />
+          <span className="sp" />
+          <span className="ccd-m">{!c.rpcs.length ? "No RPCs listed" : healthFrom === "none" ? `${c.rpcs.length} RPC${c.rpcs.length > 1 ? "s" : ""}` : `${passing} of ${c.rpcs.length} pass${isFinite(best) ? ` · ${Math.round(best)} ms` : ""}`}</span>
+        </div>
+      </a>
+      <AddWallet c={c} />
+    </div>
   )
 }

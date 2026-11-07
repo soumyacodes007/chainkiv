@@ -5,6 +5,7 @@ import { assess, toneVar, works } from "../lib/health"
 import { href } from "../lib/router"
 import { searchChains } from "../lib/search"
 import { useStore } from "../lib/store"
+import { AddWallet } from "../ui/addWallet"
 import { ChainCard, Glyph, LayerTag } from "../ui/chain"
 import { Dots } from "../ui/charts"
 import { I } from "../ui/icons"
@@ -84,19 +85,22 @@ export function Chains() {
       ) : (
         <div className="panel rowsp">
           {list.slice(0, shown).map((c) => (
-            <a key={c.id} className="crow" href={href(`chain/${c.id}`)}>
-              <Glyph chain={c} size={26} />
-              <span className="grow trunc n">{c.name}</span>
-              <span className="c-id num hide-sm">{c.id}</span>
-              <span className="c-s hide-sm">{c.symbol}</span>
-              <span className="hide-sm">
-                <LayerTag c={c} />
-              </span>
-              <span className="c-d hide-sm">
-                <Dots tones={c.rpcs.map((r) => toneVar(assess(r).tone))} max={10} />
-              </span>
-              <I n="chevron-right" s={14} className="faint" />
-            </a>
+            <div key={c.id} className="crowp">
+              <a className="crow" href={href(`chain/${c.id}`)}>
+                <Glyph chain={c} size={26} />
+                <span className="grow trunc n">{c.name}</span>
+                <span className="c-id num hide-sm">{c.id}</span>
+                <span className="c-s hide-sm">{c.symbol}</span>
+                <span className="hide-sm">
+                  <LayerTag c={c} />
+                </span>
+                <span className="c-d hide-sm">
+                  <Dots tones={c.rpcs.map((r) => toneVar(assess(r).tone))} max={10} />
+                </span>
+                <I n="chevron-right" s={14} className="faint" />
+              </a>
+              <AddWallet c={c} compact />
+            </div>
           ))}
         </div>
       )}

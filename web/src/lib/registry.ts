@@ -49,6 +49,9 @@ async function trust(): Promise<Trust> {
   return { publisher: PUBLISHER, anchorTx: ANCHOR_TX ?? "", source: "this site's settings" }
 }
 
+/** Local development only: the dev server adds this machine's GitHub login, which the browser never sees. */
+const throughDevServer = ((url, init) => fetch(String(url).replace(/^https:\/\/api\.github\.com\/repos\/ethereum-lists\/chains\/compare\//, `${location.origin}/github-compare/`), init)) as typeof fetch
+
 /** GitHub allows 60 calls an hour per network without a login, and a commit on main stays there, so each browser asks once. */
 async function upstream(commit: string) {
   const key = `chainkiv.upstream.${commit}`
@@ -56,7 +59,7 @@ async function upstream(commit: string) {
     const saved = localStorage.getItem(key)
     if (saved) return JSON.parse(saved) as Awaited<ReturnType<typeof upstreamFromGitHub>>
   } catch {}
-  const result = await upstreamFromGitHub(commit)
+  const result = await upstreamFromGitHub(commit, env.VITE_GITHUB_PROXY ? throughDevServer : undefined)
   try {
     if (result.onMain) localStorage.setItem(key, JSON.stringify(result))
   } catch {}

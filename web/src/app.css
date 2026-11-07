@@ -124,6 +124,12 @@
   display: block;
   flex-shrink: 0;
 }
+.glyphi {
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border);
+  object-fit: contain;
+}
 
 /* ---- overview hero ---------------------------------------------------- */
 .ovh {
@@ -599,9 +605,9 @@ a.rr:hover .rl {
 .ccd {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding: 13px 14px;
+  padding: 13px 14px 12px;
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface);
@@ -1464,4 +1470,155 @@ a.fnode:hover {
   .rr .rl {
     white-space: normal;
   }
+}
+
+/* ---- trust box ---------------------------------------------------------------------------------- */
+.tbox {
+  position: relative;
+  padding: 14px 16px 12px;
+  transition: border-color 0.15s var(--ease);
+}
+.tbox:hover {
+  border-color: var(--text-4);
+}
+.tbox-open {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: pointer;
+}
+.tbox-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tbox-h .t {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.tbox-h .d {
+  margin-top: 1px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+.tbox.green .tbox-h > .i {
+  color: var(--green);
+}
+.tbox.amber .tbox-h > .i {
+  color: var(--amber);
+}
+.tbox.red .tbox-h > .i {
+  color: var(--red);
+}
+.tbox.gray .tbox-h > .i {
+  color: var(--text-3);
+}
+.tlines {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.tline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.tn {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: var(--text-3);
+  background: var(--border);
+}
+.tline.pass .tn {
+  color: #fff;
+  background: var(--green);
+}
+.tline.fail .tn {
+  color: #fff;
+  background: var(--red);
+}
+.tline.pending .tn {
+  color: #fff;
+  background: var(--amber);
+}
+.tl {
+  color: var(--text-2);
+}
+.tv {
+  margin-left: auto;
+  min-width: 0;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tv a {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.tbox-f {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.tbox-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.tdh {
+  margin: 14px 0 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.tdsteps {
+  padding: 0;
+}
+.modal-b .demopub {
+  margin-top: 14px;
+}
+
+/* ---- add to wallet ------------------------------------------------------------------------------ */
+.ccd-l {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.addw {
+  display: block;
+}
+.addw.compact {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+}
+.crowp {
+  position: relative;
+  border-top: 1px solid var(--divider);
+}
+.crowp:first-child {
+  border-top: 0;
+}
+.crowp .crow {
+  padding-right: 46px;
+  border-top: 0;
 }

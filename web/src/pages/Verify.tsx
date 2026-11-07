@@ -4,56 +4,9 @@ import { ETH_EXPLORER, publisherName, reg, runVerify, type Step, type Verdict } 
 import { href } from "../lib/router"
 import { useStore } from "../lib/store"
 import { Glyph } from "../ui/chain"
+import { NOT_PROVEN, PROVES, Result, StepRow, waitingSteps } from "../ui/checks"
 import { I } from "../ui/icons"
-import { cx, Empty } from "../ui/kit"
-
-const PLAIN: Record<string, [string, string]> = {
-  publisher: ["Who published this?", "An ENS name on Ethereum says which address speaks for the list"],
-  anchor: ["Did they sign this release?", "The release's fingerprint is in a transaction from that address"],
-  manifest: ["Is the release complete?", "Rebuild the whole tree from Arkiv and compare it with what was signed"],
-  file: ["Is this the upstream file?", "Hash the record the way git does and compare"],
-  attributes: ["Do the searchable fields match?", "Rebuild every field from the file, so none were altered"],
-  proof: ["Is it really in the release?", "A Merkle proof links this chain to the signed root"],
-  upstream: ["Is the commit really upstream?", "The commit must be in the main branch of ethereum-lists/chains"],
-}
-
-const ICON: Record<string, string> = { pass: "check", fail: "x", pending: "hourglass", "not-run": "ellipsis" }
-
-function StepRow({ step, shown, last }: { step: Step; shown: boolean; last: boolean }) {
-  const [title, text] = PLAIN[step.id] ?? [step.label, ""]
-  const status = shown ? step.status : "wait"
-  return (
-    <li className={cx("vstep", status, last && "last")}>
-      <span className="vnode">
-        {shown ? <I n={ICON[step.status] ?? "ellipsis"} s={14} /> : <I n="loader" s={14} className="spin" />}
-      </span>
-      <div className="vbody">
-        <div className="t">{title}</div>
-        <div className="d">{text}</div>
-        {shown && step.detail && <div className="r">{step.detail}</div>}
-      </div>
-    </li>
-  )
-}
-
-function Result({ v }: { v: Verdict }) {
-  const map: Record<string, [string, string, string, string]> = {
-    verified: ["green", "badge-check", `Verified, release ${v.release}`, `Commit ${v.commit?.slice(0, 10)}. All seven checks passed in this browser.`],
-    pending: ["amber", "hourglass", "Pending anchor", "This record is newer than the latest signed release, so it can't be verified yet."],
-    failed: ["red", "shield-alert", "Failed", `Stopped at: ${v.steps.find((s) => s.status === "fail")?.label ?? "a check"}.`],
-    incomplete: ["gray", "circle-dashed", "Not verified yet", "Some checks could not run, and a check that didn't run never counts as a pass."],
-  }
-  const [c, icon, title, text] = map[v.state]!
-  return (
-    <div className={cx("vresult", c)}>
-      <I n={icon} s={22} />
-      <div>
-        <div className="t">{title}</div>
-        <div className="d">{text}</div>
-      </div>
-    </div>
-  )
-}
+import { Empty } from "../ui/kit"
 
 export function Verify({ id }: { id: string }) {
   const chain = useStore((s) => s.byId.get(id))
@@ -86,7 +39,7 @@ export function Verify({ id }: { id: string }) {
       </div>
     )
 
-  const steps = v?.steps ?? Object.keys(PLAIN).map((k) => ({ id: k, group: "data", label: k, status: "not-run", detail: "" }) as Step)
+  const steps = v?.steps ?? waitingSteps()
   const lanes: [string, string, Step[]][] = [
     ["Right publisher", "Is this who it claims to be?", steps.filter((s) => s.group === "publisher")],
     ["Right data", "Is this exactly what they signed?", steps.filter((s) => s.group === "data")],
@@ -145,7 +98,7 @@ export function Verify({ id }: { id: string }) {
             <h2>What a pass proves</h2>
           </div>
           <div className="panel-b checks">
-            {["The record is byte-for-byte the file at an upstream commit", "The named publisher signed that release", "A changed or copied record fails"].map((t) => (
+            {PROVES.map((t) => (
               <div key={t} className="c ok">
                 <I n="check" s={14} />
                 {t}
@@ -158,7 +111,7 @@ export function Verify({ id }: { id: string }) {
             <h2>What a pass doesn't prove</h2>
           </div>
           <div className="panel-b checks">
-            {["That the EthereumLists maintainers approved anything", "That what's on GitHub is correct", "That a passing RPC is honest on calls we didn't test", "That the publisher's key is safe"].map((t) => (
+            {NOT_PROVEN.map((t) => (
               <div key={t} className="c warn">
                 <I n="info" s={14} />
                 {t}
