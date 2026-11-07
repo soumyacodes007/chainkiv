@@ -18,6 +18,23 @@ Built at ETHGlobal Mumbai. The repo, CLI and Arkiv records keep the technical na
 | Upstream commits behind | 0 on 7 Nov 2026 |
 | Release and probe history on Swarm | [Release 1](https://api.gateway.ethswarm.org/bzz/02dfe3be9574facc326ca63a62bede88a8a8a06acd5bbe223db05714f943f65b/), [1,916 readings](https://api.gateway.ethswarm.org/bzz/bb1c98a038775d7ebe17f33942777ea7f3898c8653ceeddbbc3b0578abb2692d/) |
 
+## Why Arkiv
+
+A chain list needs live data that anyone can query and check, with no server to trust. Nothing else we looked at does all of it.
+
+| | Query it | Live updates | Expires by itself | Shows who wrote it | No backend needed |
+|---|---|---|---|---|---|
+| **Arkiv** | Yes | Yes | Yes | Yes | Yes |
+| GitHub | No | No | No | Yes | Files only |
+| Postgres | Yes | Yes | No | Only what our server says | No |
+| IPFS | No | No | No | No | Through a gateway |
+
+- **Trust:** the chain sets each record's owner, so anyone can tell our records from a stranger's.
+- **No false greens:** if a prober stops, its readings expire within 2 hours.
+- **No server of ours:** the site is static files, and your browser queries Arkiv itself.
+
+The full comparison, with queries you can run, is in [arkiv/why-arkiv.md](arkiv/why-arkiv.md).
+
 ## Architecture
 
 ```mermaid
