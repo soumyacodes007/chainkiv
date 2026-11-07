@@ -2,6 +2,50 @@
 
 Everything here was measured. Anything not measured yet is listed at the end.
 
+## The short answer
+
+**Is the data up to date?** Yes. Our copy is at upstream commit `e17474286`, and GitHub showed 0 commits since then on 7 Nov 2026.
+All 2,855 chains verify against it. Health is fresher: both probers re-check 958 RPCs every 20 minutes, and readings expire
+after 2 hours, so old health can't pass as current.
+
+**How does the import keep it that way?** One command, run by hand today:
+
+```bash
+bun run cli import --commit <sha> --anchor sepolia
+```
+
+- It compares each file's git hash with what is on Arkiv, and writes only what changed.
+- At the same commit it changes nothing: all 9,610 records came back unchanged.
+- It removes rows that upstream dropped, renews records before they expire, and signs a new release.
+- It takes about 5 minutes.
+
+**The gap:** nothing runs it automatically yet, so a new upstream commit waits for us. Details are under Sync lag.
+
+**Can people filter it the way they actually search?** Yes. Each row ran on Rabdi, and the site's Networks page builds the same
+queries and shows them.
+
+| People search by | Query | Works on the live site |
+|---|---|---|
+| Chain ID | `chainId = u64(8453)` | Yes |
+| Name | `name STARTSWITH str('Base')` | Yes, and it's case-sensitive, so the site adds fuzzy matching on top |
+| Short name | `shortName STARTSWITH str('arb')` | Yes |
+| Layer | `layer = str('L2')` | Yes |
+| Parent chain | `parentChainId = u64(1)` | By query |
+| Currency | `nativeSymbol = str('ETH')` | By query |
+| Status | `status = str('active')` | Yes |
+| Reused chain ID | `reusedChainId = true` | Yes |
+| RPCs that work | `chainId = u64(1) AND up = true AND chainIdOk = true` on `chainkiv.rpcHealth` | Yes |
+| RPCs that don't track you | `tracking = str('none')` on `chainkiv.rpcPrivacy` | By query |
+
+Each also needs `arkiv.schema` and the `$owner` filter. **Not supported by Arkiv:** fuzzy or case-insensitive search, which the
+site does in the browser. Mainnet or testnet is also worked out in the browser, because it isn't an attribute yet.
+
+## What changed on 7 Nov 2026
+
+Probers moved to version 0.2.0 on 7 Nov. Readings now sign the head block's time, so an RPC with an old head no longer passes.
+Prober A's first round found 23 such RPCs, including `blast.api.pocket.network`, 12 hours behind. Rounds before this overstate
+how many RPCs were healthy. Uptime history also restarted that day, so the 7-day figure covers less than 7 days for now.
+
 Source: `ethereum-lists/chains` at commit `e17474286275730fb6b0490b1d7ea1c64a36ed9e` (5 Nov 2026).
 
 ## Import

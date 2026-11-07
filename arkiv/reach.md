@@ -1,6 +1,26 @@
 # Reach
 
-How much of the list we cover, who depends on that list, and who has tried our copy.
+## The short answer
+
+**Who uses or depends on this data today?** Almost every EVM tool that adds a network. MetaMask, Chainlist and ethereum.org all
+read `chainid.network/chains.json`, which is built from this list, and the upstream repo has 9,833 stars and 2,190 contributors.
+Those users depend on the upstream list. None of them uses our copy yet.
+
+**Who would use our copy after Mumbai, and for what?** The people below, because a flat file can't tell them which RPCs work
+today or prove a record is unchanged.
+
+| Who | What they would use it for | How they would do it today |
+|---|---|---|
+| Wallets adding a network | Offer only RPCs that pass checks, and warn when none do | One `healthyRpcs` call in `src/client.ts`, or an Arkiv query |
+| Listing sites like Chainlist | Show signed health and a proof link beside each chain | Read the records from Arkiv with no API key |
+| People adding a network by hand | Pick an RPC that works, and add it in one click | [The site](https://chainroll-flame.vercel.app) |
+| RPC providers | See how their endpoints look from outside, in public | Search for their URL on the site, or query `chainkiv.rpcHealth` |
+| The EthereumLists maintainers | Find dead RPCs, and take over signing by pointing the ENS name at their own key | The RPC health page, then `ens-handover` |
+| Developers and agents | Ask "which L2s use ETH?" without downloading every file | One query, with no account |
+
+**This is who we built it for, not who has agreed to use it.** No one has committed yet, and we have not spoken to these teams.
+Our first step after Mumbai is to show the maintainers the list of dead RPCs, because 1,800 networks with none working is a
+problem they can act on.
 
 ## Coverage
 

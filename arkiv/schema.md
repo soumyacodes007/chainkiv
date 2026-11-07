@@ -19,6 +19,8 @@ entities with the same schema, and they are ignored.
 | `chainkiv.rpcPrivacy` | Publisher | 30 days, renewed under 15 | `chainId*` u64, `url*`, `tracking*`, `policyKey*`, `source`, `sourceCommit`, `licence` str |
 | `chainkiv.privacyPolicy` | Publisher | 30 days, renewed under 15 | `policyKey*`, `policyHash*`, `source`, `sourceCommit`, `licence` str, `text` bytes |
 | `chainkiv.proposal` | Anyone | 14 days | `kind*` str, `targetChainId*` u64, `shortName*`, `note` str, `raw` bytes |
+| `chainkiv.swarmCopy` | Publisher | 90 days | `merkleRoot*` str, `releaseNo*` u64, `reference` str, `uploadedAt` u64 |
+| `chainkiv.swarmArchive` | Publisher | 90 days | `takenAt*` u64, `reference` str, `readings` i32 |
 | `chainkiv.review` | Validator | 14 days | `proposalKey*` key, `verdict*` str, `targetChainId*` u64, `reasons` str |
 
 ## Fields people query by

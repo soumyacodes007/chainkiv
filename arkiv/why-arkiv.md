@@ -3,6 +3,29 @@
 The chain list is a folder of JSON files on GitHub. That works for chain IDs and names, which rarely change. It does not
 work for the questions below, which need live data, queries and a way to tell who wrote what.
 
+## The short answer
+
+**If this data sat in Postgres, what could people no longer do?**
+
+- **Check it without trusting us.** A database shows what its operator says. On Arkiv the chain sets each record's owner, so
+  anyone can tell our records from a stranger's.
+- **Read it with no server of ours.** The site is static files, and your browser queries Arkiv itself. If we vanish, the data
+  and every query still work.
+- **Write without an account.** Anyone with a wallet can propose a chain, and any prober can publish readings under its own
+  address. With Postgres we would run the accounts and the moderation.
+- **Rely on expiry.** A reading disappears by itself if a prober stops, so a dead prober can't leave a false green.
+
+**What can people do with our copy that they can't do with the original source?**
+
+| With our copy | With the GitHub list |
+|---|---|
+| Ask for every L2 of Ethereum in one query | Download and parse every file |
+| See which RPCs work now, signed by two probers | See what was listed, working or not |
+| Prove a record matches a signed release | Trust whoever served the file |
+| See that an RPC's head is hours old | Nothing shows this |
+| Find chains whose ID was reused, with one query | Search the files by hand |
+| Propose a chain with a wallet | Open a pull request with a GitHub account |
+
 ## Why this is better than what exists
 
 Wallets and sites already use a chain list. What they can't do is check it. Chainroll keeps the same data and adds proof
