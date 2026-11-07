@@ -234,7 +234,7 @@ export function ChainPage({ id }: { id: string }) {
           )}
         </div>
         <div className="stack">
-          <TrustBox chain={chain} check={check} />
+          <TrustBox chain={chain} check={check} rpcs={rpcs} />
           {rpcs.length > 0 && healthFrom !== "none" && (
             <Panel title="RPC health">
               <SegBar parts={parts} />

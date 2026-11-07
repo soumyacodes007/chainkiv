@@ -2,11 +2,12 @@
 import { useState, type ReactNode } from "react"
 import { ago, short } from "../lib/format"
 import { ETH_EXPLORER, publisherName, type Step } from "../lib/registry"
-import type { ChainRow } from "../lib/types"
+import type { ChainRow, RpcRow } from "../lib/types"
 import type { Check } from "../lib/useVerdict"
 import { NOT_PROVEN, PROVES, Result, STEP_ICON, StepRow, waitingSteps } from "./checks"
 import { I } from "./icons"
-import { cx, Modal } from "./kit"
+import { cx, Modal, Seg } from "./kit"
+import { TrustMap } from "./trustMap"
 
 const UPSTREAM = "https://github.com/ethereum-lists/chains/commit"
 
@@ -28,8 +29,9 @@ function Line({ status, label, children }: { status: string; label: string; chil
   )
 }
 
-function Details({ chain, check, onClose }: { chain: ChainRow; check: Check; onClose: () => void }) {
+function Details({ chain, check, rpcs, onClose }: { chain: ChainRow; check: Check; rpcs: RpcRow[]; onClose: () => void }) {
   const { verdict, anchorTx, retry } = check
+  const [tab, setTab] = useState("map")
   const steps = verdict?.steps ?? waitingSteps()
   const lanes: [string, Step[]][] = [
     ["Right publisher", steps.filter((s) => s.group === "publisher")],
@@ -58,38 +60,47 @@ function Details({ chain, check, onClose }: { chain: ChainRow; check: Check; onC
           </div>
         </div>
       )}
-      {lanes.map(([title, list]) => (
-        <section key={title}>
-          <h3 className="tdh">{title}</h3>
-          <ol className="vsteps tdsteps">
-            {list.map((s, i) => (
-              <StepRow key={s.id} step={s} shown={!!verdict} last={i === list.length - 1} />
-            ))}
-          </ol>
-        </section>
-      ))}
-      <section>
-        <h3 className="tdh">What a pass proves</h3>
-        <div className="checks">
-          {PROVES.map((t) => (
-            <div key={t} className="c ok">
-              <I n="check" s={14} />
-              {t}
-            </div>
+      <div className="tabs-t">
+        <Seg label="Show" value={tab} onChange={setTab} options={[["map", "Map"], ["checks", "All checks"]]} />
+      </div>
+      {tab === "map" ? (
+        <TrustMap chainId={chain.id} check={check} rpcs={rpcs} />
+      ) : (
+        <>
+          {lanes.map(([title, list]) => (
+            <section key={title}>
+              <h3 className="tdh">{title}</h3>
+              <ol className="vsteps tdsteps">
+                {list.map((s, i) => (
+                  <StepRow key={s.id} step={s} shown={!!verdict} last={i === list.length - 1} />
+                ))}
+              </ol>
+            </section>
           ))}
-        </div>
-      </section>
-      <section>
-        <h3 className="tdh">What a pass doesn't prove</h3>
-        <div className="checks">
-          {NOT_PROVEN.map((t) => (
-            <div key={t} className="c warn">
-              <I n="info" s={14} />
-              {t}
+          <section>
+            <h3 className="tdh">What a pass proves</h3>
+            <div className="checks">
+              {PROVES.map((t) => (
+                <div key={t} className="c ok">
+                  <I n="check" s={14} />
+                  {t}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
+          <section>
+            <h3 className="tdh">What a pass doesn't prove</h3>
+            <div className="checks">
+              {NOT_PROVEN.map((t) => (
+                <div key={t} className="c warn">
+                  <I n="info" s={14} />
+                  {t}
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
       <div className="demopub">
         <I n="signature" s={15} />
         <span>
@@ -105,7 +116,7 @@ function Details({ chain, check, onClose }: { chain: ChainRow; check: Check; onC
   )
 }
 
-export function TrustBox({ chain, check }: { chain: ChainRow; check: Check }) {
+export function TrustBox({ chain, check, rpcs }: { chain: ChainRow; check: Check; rpcs: RpcRow[] }) {
   const [open, setOpen] = useState(false)
   const { verdict, anchorTx, publisher, checkedAt } = check
   const steps = verdict?.steps ?? []
@@ -159,7 +170,7 @@ export function TrustBox({ chain, check }: { chain: ChainRow; check: Check }) {
           <I n="chevron-right" s={13} />
         </span>
       </div>
-      {open && <Details chain={chain} check={check} onClose={() => setOpen(false)} />}
+      {open && <Details chain={chain} check={check} rpcs={rpcs} onClose={() => setOpen(false)} />}
     </section>
   )
 }
