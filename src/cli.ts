@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 // chainkiv: import, survey, probe, verify and query. Keys come from the environment and are never printed.
-import { SwarmCopy } from "./schemas"
-import { checkCopy, encodeBundle, STAMP_LABEL, SWARM_BEE } from "./swarm"
+import { RpcHealth, SwarmArchive, SwarmCopy } from "./schemas"
+import { checkArchive, checkCopy, encodeArchive, encodeBundle, STAMP_LABEL, SWARM_BEE, type ArchivedReading } from "./swarm"
 import { mkdir } from "node:fs/promises"
 import { formatEther, parseEther, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { ExpirationTime } from "@arkiv-network/sdk"
-import { str, u64 } from "@arkiv-network/sdk/schema"
+import { i32, str, u64 } from "@arkiv-network/sdk/schema"
 import { LOCAL_CHAIN_ID, localNetwork, rabdiNetwork, readAll, reader, val, writer, type Network } from "./arkiv"
 import { CHAINLIST_FILE, CHAINLIST_REPO, hashRows, parseChainlist } from "./chainlist"
 import { planChainlist, readChainlistExisting } from "./chainlist-import"
@@ -392,6 +392,42 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     if (!response.ok) throw new Error(`The node refused: ${await response.text()}`)
     print({ ...(await response.json() as object), days, costXbzz: cost })
   },
+  async "swarm-archive"(flags) {
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    const reg = registry(net)
+    const client = reader(net)
+    const probers = await reg.probers()
+    if (!probers.length) throw new Error("No probers are named on ENS")
+    const readings: ArchivedReading[] = []
+    for (const prober of probers) {
+      for (const r of await readAll<any>(client, { schema: RpcHealth, owner: prober.address })) {
+        readings.push({
+          prober: prober.address, region: val<string>(r.region)!, chainId: String(val(r.chainId)), url: val<string>(r.url)!, up: val<boolean>(r.up)!, chainIdOk: val<boolean>(r.chainIdOk)!, genesis: val<string>(r.genesis)!,
+          latencyMs: val<number>(r.latencyMs)!, lagBlocks: val<number>(r.lagBlocks)!, checkedAt: String(val(r.checkedAt)), blockNumber: String(val(r.blockNumber)), blockHash: val<string>(r.blockHash)!, genesisSeen: val<string>(r.genesisSeen)!,
+          ...(r.blockTime ? { blockTime: String(val(r.blockTime)) } : {}), error: val<string>(r.error) ?? "", sig: val<string>(r.sig) as Hex,
+        })
+      }
+    }
+    const takenAt = Math.floor(Date.now() / 1000)
+    const body = encodeArchive(takenAt, probers, readings)
+    const bee = flags.bee ?? SWARM_BEE
+    const stamp = flags.stamp ?? (await chainrollStamp(bee))
+    const response = await fetch(`${bee}/bzz?name=chainroll-probes-${takenAt}.json`, { method: "POST", headers: { "content-type": "application/json", "swarm-postage-batch-id": stamp, "swarm-deferred-upload": "false" }, body })
+    if (!response.ok) throw new Error(`The node refused the upload: ${response.status} ${(await response.text()).slice(0, 120)}`)
+    const { reference } = (await response.json()) as { reference: string }
+    console.log(`Uploaded ${readings.length} readings, ${Math.ceil(body.length / 1024)} KB, as ${reference}. Reading it back`)
+    const trusted = probers.map((p) => p.address)
+    let seen = { ok: false, detail: "" }
+    for (let i = 0; i < 24 && !seen.ok; i++) {
+      seen = await checkArchive(reference, trusted)
+      if (!seen.ok) await Bun.sleep(10_000)
+    }
+    if (!seen.ok) throw new Error(`Uploaded ${reference}, but it can't be read back yet: ${seen.detail}`)
+    const values = { takenAt: u64(BigInt(takenAt)), reference: str(reference), readings: i32(readings.length) }
+    await writer(net, account).executeBatch({ creates: [{ schema: SwarmArchive, values, expiration: ExpirationTime.fromDays(CORE_DAYS) }] })
+    print({ reference, readings: readings.length, detail: seen.detail })
+  },
   async "swarm-save"(flags) {
     const net = network()
     const account = keyFor("PUBLISHER_KEY", net)
@@ -459,6 +495,7 @@ if (!command) {
   fund-probers --amount 1 [--from prober-a] [--dry-run]
   swarm-stamp --days 7 [--confirm]                Show the cost of a stamp, and buy it with --confirm
   swarm-save  [--stamp id] [--bee url]            Copy the latest release to Swarm and record it on Arkiv
+  swarm-archive [--stamp id] [--bee url]          Store a signed snapshot of every probe reading on Swarm
   ens-register --name chainroll.eth [--dry-run]   Sepolia only
   ens-records --anchor <tx> [--release]           --release writes only what a hot key may
   ens-probers                                     Give each prober a subname

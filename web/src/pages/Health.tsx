@@ -8,6 +8,7 @@ import { Glyph } from "../ui/chain"
 import { Histogram, RankBars, type Part } from "../ui/charts"
 import { I } from "../ui/icons"
 import { Empty, Panel, Seg } from "../ui/kit"
+import { ProbeArchive } from "../ui/probeArchive"
 
 const REASONS: Record<string, string> = {
   dns: "The address no longer exists",
@@ -144,6 +145,7 @@ export function Health() {
           </div>
         </Panel>
       </div>
+      <ProbeArchive />
     </div>
   )
 }

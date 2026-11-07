@@ -9,9 +9,16 @@ export type Copy = { reference: string; uploadedAt: number }
 
 export const readCopy = (root: string): Promise<Copy | null> => reg.swarmCopy(root)
 
-export async function saveCopy(): Promise<string> {
+export type Snapshot = { reference: string; takenAt: number; readings: number }
+
+export const readSnapshots = (): Promise<Snapshot[]> => reg.swarmArchives()
+
+export const saveCopy = () => run("/__swarm-save")
+export const saveSnapshot = () => run("/__swarm-archive")
+
+async function run(path: string): Promise<string> {
   // The header is one a page on another site can't send, so only this app can spend the stamp.
-  const response = await fetch("/__swarm-save", { method: "POST", headers: { "x-chainroll": "1" } }).catch(() => null)
+  const response = await fetch(path, { method: "POST", headers: { "x-chainroll": "1" } }).catch(() => null)
   if (!response) throw new Error("The dev server didn't answer")
   const body = (await response.json().catch(() => ({}))) as { reference?: string; error?: string }
   if (!response.ok || !body.reference) throw new Error(body.error ?? "The upload failed")

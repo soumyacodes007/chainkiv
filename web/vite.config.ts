@@ -32,7 +32,7 @@ const swarmSave = (): Plugin => ({
   name: "chainroll-swarm-save",
   apply: "serve",
   configureServer(server) {
-    server.middlewares.use("/__swarm-save", (req, res) => {
+    const route = (path: string, command: string) => server.middlewares.use(path, (req, res) => {
       const reply = (status: number, body: object) => {
         res.statusCode = status
         res.setHeader("content-type", "application/json")
@@ -42,7 +42,7 @@ const swarmSave = (): Plugin => ({
       if (req.method !== "POST" || req.headers["x-chainroll"] !== "1") return reply(403, { error: "Not allowed" })
       let out = ""
       let err = ""
-      const job = spawn("bun run --conditions browser src/cli.ts swarm-save", { cwd: repo, shell: true })
+      const job = spawn(`bun run --conditions browser src/cli.ts ${command}`, { cwd: repo, shell: true })
       job.stdout.on("data", (d) => (out += d))
       job.stderr.on("data", (d) => (err += d))
       job.on("close", (code) => {
@@ -51,6 +51,8 @@ const swarmSave = (): Plugin => ({
         else reply(500, { error: err.trim().split("\n").at(-1)?.slice(0, 200) || "The upload failed" })
       })
     })
+    route("/__swarm-save", "swarm-save")
+    route("/__swarm-archive", "swarm-archive")
   },
 })
 

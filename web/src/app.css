@@ -2355,3 +2355,27 @@ a.tstep:focus-visible {
     flex-wrap: wrap;
   }
 }
+
+.parc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-height: 44px;
+  padding: 6px 16px;
+  border-top: 1px solid var(--divider);
+  font-size: var(--fs-sm);
+}
+.parc-row:first-child {
+  border-top: 0;
+}
+.parc-row a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.parc-e {
+  padding: 12px 16px;
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}

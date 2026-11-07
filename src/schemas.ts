@@ -91,6 +91,12 @@ export const SwarmCopy = defineSchema("chainkiv.swarmCopy", {
   uploadedAt: u64(),
 })
 
+export const SwarmArchive = defineSchema("chainkiv.swarmArchive", {
+  takenAt: u64().indexed(),
+  reference: str(),
+  readings: i32(),
+})
+
 export const ReleaseMeta = defineSchema("chainkiv.releaseMeta", {
   metaHash: str().indexed(),
   data: bytes(),

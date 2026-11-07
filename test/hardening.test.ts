@@ -7,7 +7,7 @@ import { checkedBlock, LIMIT_MESSAGE } from "../src/probe"
 import { counted, lagOf, probeGently, uniqueTargets } from "../src/prober"
 import { isStaleHead, readingText, signerOf } from "../src/readings"
 import { genesisOf, merkleRoot } from "../src/release"
-import { encodeBundle, verifyBundle } from "../src/swarm"
+import { encodeArchive, encodeBundle, verifyArchive, verifyBundle } from "../src/swarm"
 import type { Source } from "../src/source"
 import { MAX_LAG_BLOCKS, verdictOf } from "../src/survey"
 
@@ -251,5 +251,29 @@ describe("swarm", () => {
   test("a file that isn't a release is refused", () => {
     expect(verifyBundle("<html>", root).ok).toBe(false)
     expect(verifyBundle("{}", root).ok).toBe(false)
+  })
+})
+
+describe("probe archive", () => {
+  const account = privateKeyToAccount(generatePrivateKey())
+  const row = async () => {
+    const r = { prober: account.address, region: "test", chainId: "1", url: "https://a", up: true, chainIdOk: true, genesis: "ok", latencyMs: 12, lagBlocks: 0, checkedAt: "1000", blockNumber: "5", blockHash: "0xb", genesisSeen: "0xg", blockTime: "990", error: "" }
+    const sig = await account.signMessage({ message: readingText({ ...r, chainId: 1n, checkedAt: 1000n, blockNumber: 5n, blockTime: 990n }) })
+    return { ...r, sig }
+  }
+
+  test("a snapshot of signed readings proves itself", async () => {
+    const archive = encodeArchive(1, [{ name: "a", address: account.address }], [await row()])
+    expect(await verifyArchive(archive, [account.address])).toEqual({ ok: true, detail: "All 1 readings carry a valid prober signature" })
+  })
+
+  test("an edited reading is caught", async () => {
+    const archive = encodeArchive(1, [], [{ ...(await row()), up: false }])
+    expect((await verifyArchive(archive, [account.address])).ok).toBe(false)
+  })
+
+  test("a reading from a prober not on the list is refused", async () => {
+    const archive = encodeArchive(1, [], [await row()])
+    expect((await verifyArchive(archive, ["0x0000000000000000000000000000000000000001"])).ok).toBe(false)
   })
 })
