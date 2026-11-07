@@ -109,16 +109,3 @@ with no GitHub account.
 | [The site](https://chainroll-flame.vercel.app) | A browser. It reads Arkiv and Ethereum directly, with no backend of ours |
 | `bun run cli query "..."` | This repo, with no key or wallet |
 | The client in `src/client.ts` | This repo. It is not published to npm yet |
-
-## People who tried it
-
-**None recorded yet, so the target of at least one person is not met.** A person goes here only once they have tried it
-themselves and agreed to be quoted.
-
-| Who | What they tried | What they said | Date |
-|---|---|---|---|
-
-## Not measured
-
-- Site visits: the site has no analytics.
-- Use by any wallet, explorer or listing site: none uses it today.
