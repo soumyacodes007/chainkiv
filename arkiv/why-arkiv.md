@@ -3,6 +3,41 @@
 The chain list is a folder of JSON files on GitHub. That works for chain IDs and names, which rarely change. It does not
 work for the questions below, which need live data, queries and a way to tell who wrote what.
 
+## Why this is better than what exists
+
+Wallets and sites already use a chain list. What they can't do is check it. Chainroll keeps the same data and adds proof
+that it is unchanged, evidence that its RPCs work, and a way to query both.
+
+| Question | `ethereum-lists/chains` on GitHub | `chainid.network/chains.json` | Chainlist | Chainroll |
+|---|---|---|---|---|
+| Can I query it? | Read the files | Download one file | Search on its site | Typed queries from any browser, with no key |
+| Does this RPC work now? | Not part of the list | Not part of the file | Reports latency and privacy | Readings signed by two probers, on Arkiv |
+| Is it on the right chain, and is its head current? | Not part of the list | Not part of the file | Not checked by us | Chain ID, first block, and head age |
+| Who wrote this record? | Git history | A built file | The site | The entity's owner, set by the chain, with the publisher named on ENS |
+| Can I prove this copy wasn't changed? | Trust GitHub | Trust the host | Trust the site | Seven checks in your browser, ending at a signature on Ethereum |
+| What if the host goes away? | Clones survive | Gone | Gone | Rebuild from Arkiv, or from the copy on Swarm, and check it against the same root |
+| Can I see past RPC health? | No | No | Not checked by us | Signed snapshots on Swarm |
+| Can I propose without GitHub? | No | No | No | Yes, from a wallet. The automatic validator isn't running yet |
+
+### The difference, measured
+
+- **The list goes stale, and only live checks show it.** Blast [announced its shutdown](https://www.theblock.co/news/business/2026-10-02-blast-ethereum-layer-2-shutting-down-417583)
+  on 2 Oct 2026. On 7 Nov, 0 of its 21 RPCs passed on Chainroll. Its official `rpc.blast.io` no longer resolves in public DNS,
+  and the RPCs that still answer were serving a head about 12 hours old.
+- **Answering is not the same as working.** Prober A's first round with head age found 23 RPCs with old heads that had
+  counted as healthy, including one over 2,000 hours behind.
+- **Tampering is visible.** Changing one character of Base's record in a test browser turned the record red and failed the
+  check, while the rest of the path stayed green.
+- **Every chain checks out.** All 2,855 chains pass `verify --all` against a release anchored on Sepolia.
+- **Nothing needs our server.** The site is static files, and your browser reads Arkiv, Ethereum and Swarm directly.
+
+We don't replace the upstream list. It stays the source of truth, and in this version the publisher is our team, not its
+maintainers. Chainroll is a checked copy with live evidence beside it.
+
+Sources for the other columns: the [upstream repo](https://github.com/ethereum-lists/chains) and a
+[description of Chainlist](https://checker.gitcoin.co/public/application/7bZe3Bp77a/show). "Not checked by us" means we did
+not confirm it either way.
+
 ## Questions the list cannot answer today
 
 Every query here ran on Rabdi on 7 Nov 2026 with no access key and no wallet. Counts are from that run, and health counts
