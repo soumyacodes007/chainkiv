@@ -126,12 +126,6 @@ export function TrustMap({ chain, check, rpcs }: { chain: ChainRow; check: Check
     { n: 5, lane: "GitHub", title: "Upstream file", value: verdict?.commit?.slice(0, 7) ?? "…", sub: blob ? `Git blob ${blob.slice(0, 8)}` : undefined, href: verdict?.commit ? `https://github.com/ethereum-lists/chains/commit/${verdict.commit}` : undefined, status: at(5) },
   ]
 
-  const reached = real.slice(0, Math.min(stage, STEPS))
-  const passed = reached.filter((s) => s === "pass").length
-  const finished = stage >= STEPS
-  const broke = real.findIndex((s) => s === "fail") + 1
-  const headline = !verdict ? "Checking in this browser" : !finished ? `${passed} of ${STEPS} steps passed` : broke ? `The path breaks at step ${broke}` : `${passed} of ${STEPS} steps passed`
-
   return (
     <div className="tmap">
       <div className="tpath">
@@ -140,17 +134,6 @@ export function TrustMap({ chain, check, rpcs }: { chain: ChainRow; check: Check
             {lane}
           </span>
         ))}
-        <div className={cx("tsum", finished && (passed === STEPS ? "pass" : broke ? "fail" : "part"))} role="status">
-          <div className="tsum-t">
-            <b>{headline}</b>
-            <span>{checkedAt && verdict ? `Checked ${ago(checkedAt / 1000)}` : "Reading Ethereum and Arkiv"}</span>
-          </div>
-          <div className="tsum-b" aria-hidden="true">
-            {real.map((s, i) => (
-              <i key={i} className={i < reached.length ? s : undefined} />
-            ))}
-          </div>
-        </div>
         <PathStep box={boxes[0]!} />
         <PathLink n={1} on={stage >= 1} tone={tone(1)} label="named publisher sent this" />
         <PathStep box={boxes[1]!} />
@@ -162,7 +145,7 @@ export function TrustMap({ chain, check, rpcs }: { chain: ChainRow; check: Check
         <PathStep box={boxes[4]!} />
         <p className="tnote">
           <I n="lock" s={13} />
-          Checked in your browser. No server of ours is in this path.
+          {checkedAt && verdict ? `Checked in your browser ${ago(checkedAt / 1000)}.` : "Checking in your browser."} No server of ours is in this path.
         </p>
       </div>
 
