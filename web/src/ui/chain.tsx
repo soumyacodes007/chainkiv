@@ -1,4 +1,6 @@
 // The pieces that say what a chain is: its glyph, trust badge, health dot and card.
+import { useState } from "react"
+import logos from "../lib/logos.json"
 import { href } from "../lib/router"
 import { assess, toneVar, type Assessment } from "../lib/health"
 import { useStore } from "../lib/store"
@@ -20,8 +22,18 @@ const monogram = (name: string) => {
   return (words.length > 1 ? first[0]! + words[1]![0]! : first.slice(0, 2)).toUpperCase()
 }
 
-/** Each chain gets its own generated mark, so a page of chains reads as faces, not a spreadsheet. */
+const LOGOS: Record<string, string> = logos
+
+/** The chain's real logo where we hold one, served by this site. Otherwise, or if it fails, a generated mark. */
 export function Glyph({ chain, size = 36 }: { chain: Pick<ChainRow, "id" | "name" | "testnet">; size?: number }) {
+  const file = LOGOS[chain.id]
+  const [broken, setBroken] = useState(false)
+  if (file && !broken) return <img className="glyphm glyphi" src={`${import.meta.env.BASE_URL}logos/${file}`} width={size} height={size} alt={chain.name} loading="lazy" onError={() => setBroken(true)} />
+  return <Mark chain={chain} size={size} />
+}
+
+/** Each chain gets its own generated mark, so a page of chains reads as faces, not a spreadsheet. */
+function Mark({ chain, size }: { chain: Pick<ChainRow, "id" | "name" | "testnet">; size: number }) {
   const h = hash(chain.id)
   const hue = h % 360
   const rot = (h >> 9) % 60
