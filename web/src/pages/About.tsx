@@ -8,7 +8,7 @@ import { I } from "../ui/icons"
 import { Addr, Code, Empty, Panel } from "../ui/kit"
 
 const QUERIES: [string, string][] = [
-  ["One chain", "chainId = u64(8453) AND $owner = addr(0xPUBLISHER)"],
+  ["One chain", "arkiv.schema = str('chainkiv.chain') AND chainId = u64(8453) AND $owner = addr(0xPUBLISHER)"],
   ["Every layer 2 of Ethereum", "parentChainId = u64(1) AND layer = str('L2') AND $owner = addr(0xPUBLISHER)"],
   ["Search by short name", "shortName STARTSWITH str('arb') AND $owner = addr(0xPUBLISHER)"],
   ["Base's passing RPCs, fastest first", "chainId = u64(8453) AND up = true AND chainIdOk = true AND $owner = addr(0xPROBER) ORDER BY latencyMs:i32"],

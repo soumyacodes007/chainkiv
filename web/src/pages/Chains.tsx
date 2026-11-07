@@ -10,6 +10,7 @@ import { ChainCard, Glyph, LayerTag } from "../ui/chain"
 import { Dots } from "../ui/charts"
 import { I } from "../ui/icons"
 import { Empty, Seg, Select } from "../ui/kit"
+import { QueryPanel } from "../ui/queryPanel"
 
 const PAGE = 48
 
@@ -60,6 +61,7 @@ export function Chains() {
         <span className="sp" />
         <Seg label="View" value={view} onChange={setView} options={[["cards", <I key="c" n="layout-dashboard" s={13} />, undefined, "Cards view"], ["rows", <I key="r" n="list-filter" s={13} />, undefined, "Rows view"]]} />
       </div>
+      <QueryPanel filters={{ q, kind, layer, status, flag }} />
       <div className="resct">
         {plural(list.length, "network")}
         {hidden > 0 && (

@@ -1622,3 +1622,102 @@ a.fnode:hover {
   padding-right: 46px;
   border-top: 0;
 }
+
+/* ---- arkiv query panel -------------------------------------------------------------------------- */
+.qpanel {
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.qh {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 3px 8px 3px 12px;
+}
+.qt-b {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.qt-b b {
+  color: var(--text);
+  font-weight: 600;
+}
+.qb {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.qa {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+}
+.qb-d {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--divider);
+}
+.qb-d pre {
+  margin: 0;
+  overflow-x: auto;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.ql {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  padding: 0 6px;
+  border-left: 2px solid transparent;
+}
+.ql i {
+  display: inline-block;
+  width: 42px;
+  color: var(--text-4);
+  font-style: normal;
+}
+.ql.new {
+  border-left-color: var(--accent, var(--green));
+  background: var(--surface-2);
+  color: var(--text);
+}
+.qn,
+.qr {
+  margin: 8px 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+}
+.qr {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-2);
+}
+.qr .i {
+  flex: none;
+  margin-top: 3px;
+  color: var(--green);
+}
+.qr.bad {
+  color: var(--red);
+}
+@media (max-width: 640px) {
+  .qh {
+    flex-wrap: wrap;
+  }
+}
