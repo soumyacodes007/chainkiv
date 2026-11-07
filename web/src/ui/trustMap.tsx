@@ -1,21 +1,20 @@
 // The checks as a picture: one record's trust path, crossing Ethereum, Arkiv and GitHub. Every box is live data, and a box
-// is only green when the checks behind it passed. Health sits outside the signed release, so it is drawn dashed.
+// is only green when the checks behind it passed. It lights up in path order, so you can follow what depends on what.
+// Health sits outside the signed release, so it has its own dashed strip and never counts towards the path.
 import { useEffect, useState } from "react"
-import { fmt, short } from "../lib/format"
+import { ago, fmt, short } from "../lib/format"
 import { ETH_EXPLORER, ETH_NETWORK, publisherName, reg, type Step } from "../lib/registry"
-import type { RpcRow } from "../lib/types"
+import type { ChainRow, RpcRow } from "../lib/types"
 import type { Check } from "../lib/useVerdict"
 import { STEP_ICON } from "./checks"
 import { I } from "./icons"
 import { cx } from "./kit"
 
-const COLUMN = [16.5, 50, 83.5]
-const HALF = 14.5
-const ROW = 84
-const BOX = 68
-const TOP = 26
-const middle = (row: number) => TOP + row * ROW + BOX / 2
 const SELECT = { key: true, owner: false, creator: false, createdAt: false, updatedAt: false, expiresAt: false, creationFlags: false, attributeSchema: false, attributes: {} }
+const STEPS = 5
+/** The path's five steps, then the health strip. */
+const LAST = STEPS + 1
+const PACE_MS = 420
 
 const worst = (steps: Step[], ids: string[]) => {
   const mine = steps.filter((s) => ids.includes(s.id))
@@ -24,117 +23,163 @@ const worst = (steps: Step[], ids: string[]) => {
   return "pass"
 }
 
-type Box = { row: number; col: number; title: string; value: string; sub?: string; href?: string; status: string }
+/** Counts up through the path once there is an answer. It only paces the showing: every status is the real one. */
+function useReveal(answeredAt: number | null) {
+  const [stage, setStage] = useState(0)
+  useEffect(() => {
+    setStage(0)
+    if (answeredAt === null) return
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return setStage(LAST)
+    let n = 0
+    const timer = setInterval(() => {
+      setStage(++n)
+      if (n === LAST) clearInterval(timer)
+    }, PACE_MS)
+    return () => clearInterval(timer)
+  }, [answeredAt])
+  return stage
+}
 
-function Node({ box }: { box: Box }) {
-  const icon = box.status === "wait" ? <I n="loader" s={10} className="spin" /> : <I n={box.status === "signed" ? "activity" : (STEP_ICON[box.status] ?? "circle-dashed")} s={10} />
+type StepBox = { n: number; lane: string; title: string; value: string; sub?: string; href?: string; status: string }
+
+function PathStep({ box }: { box: StepBox }) {
   const body = (
     <>
-      <span className="mnode-t">
-        <i>{icon}</i>
-        {box.title}
+      <span className="tstep-h">
+        <i className="tstep-n">{box.n}</i>
+        <span className="tstep-t">{box.title}</span>
+        <em className="tstep-l">{box.lane}</em>
+        {box.status === "wait" ? <I n="loader" s={13} className="spin" /> : box.status !== "idle" && <I n={STEP_ICON[box.status] ?? "circle-dashed"} s={13} className="tstep-i" />}
       </span>
       <b>
-        {box.value}
-        {box.href && <I n="arrow-up-right" s={11} />}
+        <span>{box.value}</span>
+        {box.href && <I n="arrow-up-right" s={12} />}
       </b>
-      {box.sub && <span className="mnode-s">{box.sub}</span>}
+      {box.sub && <span className="tstep-s">{box.sub}</span>}
     </>
   )
-  const style = { left: `${COLUMN[box.col]! - HALF}%`, width: `${HALF * 2}%`, top: TOP + box.row * ROW, height: BOX }
+  const cls = cx("tstep", `s${box.n}`, box.status)
   return box.href ? (
-    <a className={cx("mnode", box.status)} style={style} href={box.href} target="_blank" rel="noreferrer">
+    <a className={cls} href={box.href} target="_blank" rel="noreferrer">
       {body}
     </a>
   ) : (
-    <div className={cx("mnode", box.status)} style={style}>
-      {body}
+    <div className={cls}>{body}</div>
+  )
+}
+
+function PathLink({ n, on, tone, label, across }: { n: number; on: boolean; tone: string; label: string; across?: boolean }) {
+  return (
+    <span className={cx("tgo", `g${n}`, across ? "across" : "down", on && "on", tone)}>
+      <i />
+      <em>{label}</em>
+    </span>
+  )
+}
+
+function Health({ title, value, sub }: { title: string; value: string; sub: string }) {
+  return (
+    <div className="thc">
+      <span>{title}</span>
+      <b>{value}</b>
+      <small>{sub}</small>
     </div>
   )
 }
 
-export function TrustMap({ chainId, check, rpcs }: { chainId: string; check: Check; rpcs: RpcRow[] }) {
-  const { verdict, anchorTx, publisher } = check
+export function TrustMap({ chain, check, rpcs }: { chain: ChainRow; check: Check; rpcs: RpcRow[] }) {
+  const { verdict, anchorTx, publisher, checkedAt } = check
   const [entity, setEntity] = useState("")
   const [probers, setProbers] = useState<number | null>(null)
+  const stage = useReveal(verdict ? checkedAt : null)
 
   useEffect(() => {
     let on = true
     reg.probers().then((p) => on && setProbers(p.length), () => on && setProbers(0))
     if (publisher)
       reg.client
-        .request({ method: "arkiv_query", params: [`arkiv.schema = str('chainkiv.chain') AND chainId = u64(${chainId}) AND $owner = addr(${publisher})`, { select: SELECT, limit: "0x1" }] })
+        .request({ method: "arkiv_query", params: [`arkiv.schema = str('chainkiv.chain') AND chainId = u64(${chain.id}) AND $owner = addr(${publisher})`, { select: SELECT, limit: "0x1" }] })
         .then((r: { data: { key: string }[] }) => on && setEntity(r.data[0]?.key ?? ""), () => {})
     return () => {
       on = false
     }
-  }, [chainId, publisher])
+  }, [chain.id, publisher])
 
   const steps = verdict?.steps ?? []
-  const of = (...ids: string[]) => worst(steps, ids)
-  const chains = steps.find((s) => s.id === "manifest")?.detail?.match(/^(\d+) chains/)?.[1]
+  const real = [["publisher"], ["anchor"], ["manifest"], ["file", "attributes", "proof"], ["upstream"]].map((ids) => worst(steps, ids))
+  /** What a step shows: its real status once reached, a spinner if it's next, and nothing before that. */
+  const at = (n: number) => (stage >= n ? real[n - 1]! : stage + 1 === n ? "wait" : "idle")
+  const tone = (n: number) => {
+    const [a, b] = [real[n - 1]!, real[n]!]
+    return a === "fail" || b === "fail" ? "fail" : a === "pass" && b === "pass" ? "pass" : ""
+  }
+
+  const manifest = steps.find((s) => s.id === "manifest")?.detail?.match(/^(\d+) chains/)?.[1]
   const blob = steps.find((s) => s.id === "file")?.detail?.match(/[0-9a-f]{40}/)?.[0]
   const readings = rpcs.flatMap((r) => r.readings.filter((x) => x.prober !== "survey")).length
-  const measured = readings ? "signed" : "none"
 
-  const boxes: Box[] = [
-    { row: 0, col: 0, title: "ENS name", value: publisherName || "Not set", sub: `Names ${short(publisher) || "…"}`, href: publisherName ? `https://${ETH_NETWORK === "mainnet" ? "" : "sepolia."}app.ens.domains/${publisherName}` : undefined, status: of("publisher") },
-    { row: 1, col: 0, title: "Signed transaction", value: short(anchorTx) || "…", sub: verdict?.release ? `Release ${verdict.release}` : undefined, href: anchorTx ? `${ETH_EXPLORER}/tx/${anchorTx}` : undefined, status: of("anchor") },
-    { row: 1, col: 1, title: "Release manifest", value: chains ? `${fmt(Number(chains))} chains` : "…", sub: "Rebuilds the signed root", status: of("manifest") },
-    { row: 2, col: 1, title: "Chain record", value: short(entity) || "…", sub: "Entity key on Arkiv", status: of("file", "attributes", "proof") },
-    { row: 2, col: 2, title: "Upstream file", value: verdict?.commit?.slice(0, 7) ?? "…", sub: blob ? `Blob ${blob.slice(0, 8)}` : undefined, href: verdict?.commit ? `https://github.com/ethereum-lists/chains/commit/${verdict.commit}` : undefined, status: of("upstream") },
-    { row: 3, col: 1, title: "RPC records", value: `${fmt(rpcs.length)} ${rpcs.length === 1 ? "RPC" : "RPCs"}`, sub: "Listed for this chain", status: rpcs.length ? "signed" : "none" },
-    { row: 4, col: 1, title: "Signed readings", value: `${fmt(readings)} ${readings === 1 ? "reading" : "readings"}`, sub: "Signature checked here", status: measured },
-    { row: 4, col: 0, title: "Prober names", value: probers === null ? "…" : `${probers} on ENS`, sub: "Only these are trusted", status: probers ? "signed" : "none" },
+  const boxes: StepBox[] = [
+    { n: 1, lane: "Ethereum", title: "ENS name", value: publisherName || "Not set", sub: `Names ${short(publisher) || "…"}`, href: publisherName ? `https://${ETH_NETWORK === "mainnet" ? "" : "sepolia."}app.ens.domains/${publisherName}` : undefined, status: at(1) },
+    { n: 2, lane: "Ethereum", title: "Signed transaction", value: short(anchorTx) || "…", sub: verdict?.release ? `Release ${verdict.release}` : undefined, href: anchorTx ? `${ETH_EXPLORER}/tx/${anchorTx}` : undefined, status: at(2) },
+    { n: 3, lane: "Arkiv", title: "Signed chain list", value: manifest ? `${fmt(Number(manifest))} chains` : "…", sub: "Rebuilt here, matches the root", status: at(3) },
+    { n: 4, lane: "Arkiv", title: `${chain.name}'s record`, value: short(entity) || "…", sub: "Its record on Arkiv", status: at(4) },
+    { n: 5, lane: "GitHub", title: "Upstream file", value: verdict?.commit?.slice(0, 7) ?? "…", sub: blob ? `Git blob ${blob.slice(0, 8)}` : undefined, href: verdict?.commit ? `https://github.com/ethereum-lists/chains/commit/${verdict.commit}` : undefined, status: at(5) },
   ]
 
-  const passing = (a: string, b: string) => (a === "fail" || b === "fail" ? "fail" : a === "pass" && b === "pass" ? "pass" : "")
-  const down = (col: number, from: number, tone: string, dashed = false) => ({ x1: COLUMN[col]!, x2: COLUMN[col]!, y1: TOP + from * ROW + BOX, y2: TOP + (from + 1) * ROW - 3, tone, dashed })
-  const across = (row: number, col: number, tone: string, dashed = false) => ({ x1: COLUMN[col]! + HALF, x2: COLUMN[col + 1]! - HALF - 1, y1: middle(row), y2: middle(row), tone, dashed })
-  const lines = [
-    down(0, 0, passing(of("publisher"), of("anchor"))),
-    across(1, 0, passing(of("anchor"), of("manifest"))),
-    down(1, 1, passing(of("manifest"), of("file", "attributes", "proof"))),
-    across(2, 1, passing(of("file", "attributes", "proof"), of("upstream"))),
-    down(1, 2, "signed", true),
-    down(1, 3, "signed", true),
-    across(4, 0, "signed", true),
-  ]
+  const reached = real.slice(0, Math.min(stage, STEPS))
+  const passed = reached.filter((s) => s === "pass").length
+  const finished = stage >= STEPS
+  const broke = real.findIndex((s) => s === "fail") + 1
+  const headline = !verdict ? "Checking in this browser" : !finished ? `${passed} of ${STEPS} steps passed` : broke ? `The path breaks at step ${broke}` : `${passed} of ${STEPS} steps passed`
 
   return (
     <div className="tmap">
-      <div className="tmap-c" style={{ height: TOP + 5 * ROW - (ROW - BOX) }}>
+      <div className="tpath">
         {["Ethereum", "Arkiv", "GitHub"].map((lane, i) => (
-          <span key={lane} className="tlane" style={{ left: `${COLUMN[i]! - HALF}%`, width: `${HALF * 2}%` }}>
+          <span key={lane} className={`tlane l${i + 1}`}>
             {lane}
           </span>
         ))}
-        <svg aria-hidden="true">
-          <defs>
-            {["", "pass", "fail", "signed"].map((tone) => (
-              <marker key={tone} id={`arrow${tone}`} viewBox="0 0 8 8" refX="6" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-                <path d="M1 1 7 4 1 7z" className={cx("tarrow", tone)} />
-              </marker>
+        <div className={cx("tsum", finished && (passed === STEPS ? "pass" : broke ? "fail" : "part"))} role="status">
+          <div className="tsum-t">
+            <b>{headline}</b>
+            <span>{checkedAt && verdict ? `Checked ${ago(checkedAt / 1000)}` : "Reading Ethereum and Arkiv"}</span>
+          </div>
+          <div className="tsum-b" aria-hidden="true">
+            {real.map((s, i) => (
+              <i key={i} className={i < reached.length ? s : undefined} />
             ))}
-          </defs>
-          {lines.map((l, i) => (
-            <line key={i} x1={`${l.x1}%`} x2={`${l.x2}%`} y1={l.y1} y2={l.y2} className={cx("tlink", l.tone)} strokeDasharray={l.dashed ? "4 4" : undefined} markerEnd={`url(#arrow${l.tone})`} />
-          ))}
-        </svg>
-        {boxes.map((box) => (
-          <Node key={box.title} box={box} />
-        ))}
+          </div>
+        </div>
+        <PathStep box={boxes[0]!} />
+        <PathLink n={1} on={stage >= 1} tone={tone(1)} label="named publisher sent this" />
+        <PathStep box={boxes[1]!} />
+        <PathLink n={2} on={stage >= 2} tone={tone(2)} label="signed this root" across />
+        <PathStep box={boxes[2]!} />
+        <PathLink n={3} on={stage >= 3} tone={tone(3)} label="contains this record" />
+        <PathStep box={boxes[3]!} />
+        <PathLink n={4} on={stage >= 4} tone={tone(4)} label="same bytes as" across />
+        <PathStep box={boxes[4]!} />
+        <p className="tnote">
+          <I n="lock" s={13} />
+          Checked in your browser. No server of ours is in this path.
+        </p>
       </div>
-      <p className="tmap-k">
-        <span>
-          <i className="solid" />
-          Part of the seven checks
-        </span>
-        <span>
-          <i className="dash" />
-          Live health, signed by probers, outside the release
-        </span>
-      </p>
+
+      <section className={cx("thealth", stage >= LAST && "on")} aria-label="Live health">
+        <header>
+          <I n="activity" s={14} />
+          <b>Live health</b>
+          <span>Signed by probers, outside the release, so it isn't part of the path above.</span>
+        </header>
+        <div className="thealth-r">
+          <Health title="Prober names" value={probers === null ? "…" : `${probers} on ENS`} sub="Only these are trusted" />
+          <I n="arrow-right" s={14} />
+          <Health title="Signed readings" value={`${fmt(readings)} ${readings === 1 ? "reading" : "readings"}`} sub="Signature checked here" />
+          <I n="arrow-right" s={14} />
+          <Health title="RPC records" value={`${fmt(rpcs.length)} ${rpcs.length === 1 ? "RPC" : "RPCs"}`} sub="Listed for this chain" />
+        </div>
+      </section>
     </div>
   )
 }

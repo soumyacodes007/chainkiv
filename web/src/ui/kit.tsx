@@ -61,7 +61,7 @@ export function ToastHost() {
 
 export const focusable = (root: Element) => [...root.querySelectorAll<HTMLElement>("a[href],button:not(:disabled),input,textarea,[tabindex='0']")]
 
-export function Modal({ title, sub, onClose, children, footer }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Modal({ title, sub, onClose, children, footer, size }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: "xl" }) {
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null
@@ -90,7 +90,7 @@ export function Modal({ title, sub, onClose, children, footer }: { title: ReactN
     <>
       <div className="scrim enter" onClick={onClose} />
       <div className="modal-wrap" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-        <div ref={box} className="modal enter" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div ref={box} className={cx("modal enter", size)} role="dialog" aria-modal="true" aria-labelledby="modal-title">
           <div className="modal-h">
             <div>
               <h2 id="modal-title">{title}</h2>

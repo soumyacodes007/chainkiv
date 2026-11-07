@@ -39,32 +39,51 @@ function Details({ chain, check, rpcs, onClose }: { chain: ChainRow; check: Chec
   ]
   return (
     <Modal
+      size="xl"
       title={`Can you trust ${chain.name}'s record?`}
       sub="Your browser reads Arkiv and Ethereum and does the maths itself."
       onClose={onClose}
       footer={
-        <button className="btn btn-secondary btn-sm" disabled={!verdict} onClick={retry}>
-          <I n="refresh-cw" s={13} />
-          Check again
-        </button>
+        <>
+          {tab === "map" && (
+            <div className="tfoot">
+              <I n="signature" s={15} />
+              <span>
+                <b>Signed by demo publisher.</b> {publisherName ? `Named by ${publisherName}.` : ""}
+              </span>
+              {anchorTx && (
+                <a className="lnk" href={`${ETH_EXPLORER}/tx/${anchorTx}`} target="_blank" rel="noreferrer">
+                  View the signature
+                </a>
+              )}
+            </div>
+          )}
+          <span className="sp" />
+          <button className="btn btn-secondary btn-sm" disabled={!verdict} onClick={retry}>
+            <I n="refresh-cw" s={13} />
+            Check again
+          </button>
+        </>
       }
     >
-      {verdict ? (
-        <Result v={verdict} />
-      ) : (
-        <div className="vresult gray">
-          <I n="loader" s={22} className="spin" />
-          <div>
-            <div className="t">Checking…</div>
-            <div className="d">Reading Ethereum and Arkiv from this browser</div>
+      <div className="tdhead">
+        {verdict ? (
+          <Result v={verdict} />
+        ) : (
+          <div className="vresult gray">
+            <I n="loader" s={22} className="spin" />
+            <div>
+              <div className="t">Checking…</div>
+              <div className="d">Reading Ethereum and Arkiv from this browser</div>
+            </div>
           </div>
+        )}
+        <div className="tabs-t">
+          <Seg label="Show" value={tab} onChange={setTab} options={[["map", "Map"], ["checks", "All checks"]]} />
         </div>
-      )}
-      <div className="tabs-t">
-        <Seg label="Show" value={tab} onChange={setTab} options={[["map", "Map"], ["checks", "All checks"]]} />
       </div>
       {tab === "map" ? (
-        <TrustMap chainId={chain.id} check={check} rpcs={rpcs} />
+        <TrustMap chain={chain} check={check} rpcs={rpcs} />
       ) : (
         <>
           {lanes.map(([title, list]) => (
@@ -101,7 +120,7 @@ function Details({ chain, check, rpcs, onClose }: { chain: ChainRow; check: Chec
           </section>
         </>
       )}
-      <div className="demopub">
+      {tab !== "map" && <div className="demopub">
         <I n="signature" s={15} />
         <span>
           <b>Signed by demo publisher.</b> {publisherName ? `Named by ${publisherName}. ` : ""}The EthereumLists maintainers can take over by pointing the ENS name at their own key, and no app has to change.
@@ -111,7 +130,7 @@ function Details({ chain, check, rpcs, onClose }: { chain: ChainRow; check: Chec
             View the signature
           </a>
         )}
-      </div>
+      </div>}
     </Modal>
   )
 }
