@@ -118,7 +118,7 @@ function Details({ chain, check, rpcs, onClose }: { chain: ChainRow; check: Chec
 
 export function TrustBox({ chain, check, rpcs }: { chain: ChainRow; check: Check; rpcs: RpcRow[] }) {
   const [open, setOpen] = useState(false)
-  const { verdict, anchorTx, publisher, checkedAt } = check
+  const { verdict, anchorTx, publisher, checkedAt, slow } = check
   const steps = verdict?.steps ?? []
   const passed = steps.filter((s) => s.status === "pass").length
   const heads: Record<string, [string, string, string, string]> = {
@@ -127,7 +127,7 @@ export function TrustBox({ chain, check, rpcs }: { chain: ChainRow; check: Check
     failed: ["red", "shield-alert", "Failed", `${passed} of ${steps.length} checks passed`],
     incomplete: ["gray", "circle-dashed", "Couldn't finish checking", "A check that didn't run never counts as a pass"],
   }
-  const [tone, icon, title, sub] = verdict ? heads[verdict.state]! : ["gray", "loader", "Checking…", "Reading Ethereum and Arkiv from this browser"]
+  const [tone, icon, title, sub] = verdict ? heads[verdict.state]! : ["gray", "loader", slow ? "Still checking…" : "Checking…", slow ? "Arkiv or GitHub is slow to answer, so this is taking longer" : "Reading Ethereum and Arkiv from this browser"]
   return (
     <section className={cx("panel tbox", tone)}>
       <button className="tbox-open" onClick={() => setOpen(true)} aria-label={`${title}. Show all checks`} />

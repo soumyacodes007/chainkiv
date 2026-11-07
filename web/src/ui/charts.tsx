@@ -12,6 +12,8 @@ const setTip = (t: typeof tip) => {
   tip = t
   subs.forEach((f) => f())
 }
+// A row can leave the page under the pointer, and then its leave event never fires.
+addEventListener("hashchange", () => setTip(null))
 export const hover = (body: ReactNode) => ({
   onPointerMove: (e: { clientX: number; clientY: number }) => setTip({ x: e.clientX, y: e.clientY, body }),
   onPointerLeave: () => setTip(null),
