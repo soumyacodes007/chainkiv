@@ -30,7 +30,7 @@ function Node({ box }: { box: Box }) {
   const icon = box.status === "wait" ? <I n="loader" s={10} className="spin" /> : <I n={box.status === "signed" ? "activity" : (STEP_ICON[box.status] ?? "circle-dashed")} s={10} />
   const body = (
     <>
-      <span className="mt">
+      <span className="mnode-t">
         <i>{icon}</i>
         {box.title}
       </span>
@@ -38,7 +38,7 @@ function Node({ box }: { box: Box }) {
         {box.value}
         {box.href && <I n="arrow-up-right" s={11} />}
       </b>
-      {box.sub && <span className="ms">{box.sub}</span>}
+      {box.sub && <span className="mnode-s">{box.sub}</span>}
     </>
   )
   const style = { left: `${COLUMN[box.col]! - HALF}%`, width: `${HALF * 2}%`, top: TOP + box.row * ROW, height: BOX }

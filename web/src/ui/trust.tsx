@@ -22,9 +22,9 @@ function lineStatus(steps: Step[], ids: string[]) {
 function Line({ status, label, children }: { status: string; label: string; children: ReactNode }) {
   return (
     <div className={cx("tline", status)}>
-      <span className="tn">{status === "wait" ? <I n="loader" s={11} className="spin" /> : <I n={STEP_ICON[status] ?? "ellipsis"} s={11} />}</span>
-      <span className="tl">{label}</span>
-      <span className="tv">{children}</span>
+      <span className="tline-n">{status === "wait" ? <I n="loader" s={11} className="spin" /> : <I n={STEP_ICON[status] ?? "ellipsis"} s={11} />}</span>
+      <span className="tline-l">{label}</span>
+      <span className="tline-v">{children}</span>
     </div>
   )
 }
