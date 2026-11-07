@@ -18,20 +18,65 @@ Built at ETHGlobal Mumbai. The repo, CLI and Arkiv records keep the technical na
 | Upstream commits behind | 0 on 7 Nov 2026 |
 | Release and probe history on Swarm | [Release 1](https://api.gateway.ethswarm.org/bzz/02dfe3be9574facc326ca63a62bede88a8a8a06acd5bbe223db05714f943f65b/), [1,916 readings](https://api.gateway.ethswarm.org/bzz/bb1c98a038775d7ebe17f33942777ea7f3898c8653ceeddbbc3b0578abb2692d/) |
 
-## How it works
+## Architecture
 
 ```mermaid
-flowchart LR
-  GH["ethereum-lists/chains<br/>on GitHub"] -->|import| AR[("Arkiv<br/>chains, RPCs, manifest")]
-  AR -->|release root| ETH["Ethereum<br/>signed anchor"]
-  ENS["chainroll.eth<br/>ENSv2"] -->|names publisher,<br/>anchor and probers| ETH
-  PR["Two probers<br/>on Railway"] -->|signed readings| AR
-  AR -->|bundle and snapshots| SW["Swarm<br/>copies that prove themselves"]
-  AR --> APP["Your browser"]
-  ETH --> APP
-  ENS --> APP
-  SW --> APP
+flowchart TB
+  subgraph sources["Sources"]
+    direction LR
+    GH["ethereum-lists/chains<br/>2,855 chain files"]
+    CL["Chainlist<br/>extra RPCs and labels"]
+  end
+
+  subgraph writers["Writers"]
+    direction LR
+    IMP["Importer<br/>publisher wallet"]
+    PA["Prober A<br/>Southeast Asia"]
+    PB["Prober B<br/>US West"]
+  end
+
+  subgraph arkiv["Arkiv: live and queryable"]
+    direction LR
+    REC["Chains, RPCs, explorers"]
+    REL["Release manifest"]
+    HEALTH["Signed RPC readings<br/>expire in 2 hours"]
+    REF["Swarm references"]
+  end
+
+  subgraph trust["Ethereum: who to trust"]
+    direction LR
+    ENS["chainroll.eth<br/>publisher, root, probers"]
+    ANCHOR["Signed release<br/>transaction"]
+  end
+
+  subgraph swarm["Swarm: lasting copies"]
+    direction LR
+    BUNDLE["Release bundle"]
+    HISTORY["Probe history"]
+  end
+
+  APP["Your browser<br/>no backend, runs every check itself"]
+
+  GH --> IMP
+  CL --> IMP
+  IMP --> REC
+  IMP --> REL
+  IMP --> ANCHOR
+  IMP --> BUNDLE
+  IMP --> REF
+  PA --> HEALTH
+  PB --> HEALTH
+  HEALTH --> HISTORY
+  ENS -. names .-> ANCHOR
+  ENS -. names .-> PA
+  ENS -. names .-> PB
+  arkiv --> APP
+  trust --> APP
+  swarm --> APP
 ```
+
+The upstream list stays the source of truth. Arkiv holds the live, queryable copy, Ethereum says who to trust, and Swarm keeps
+copies that anyone can check.
 
 ## How one record is verified
 
@@ -190,7 +235,7 @@ chose the idea, reviewed the trust design, funded the wallets and made the outwa
 ## More
 
 - [arkiv/why-arkiv.md](arkiv/why-arkiv.md): what people would lose without Arkiv, and why not GitHub, Postgres or IPFS
-- [arkiv/reach.md](arkiv/reach.md): who depends on the list, and who would use this copy
+- [arkiv/reach.md](arkiv/reach.md): how many depend on the list, who would use this copy, and how to try it
 - [arkiv/data-quality.md](arkiv/data-quality.md): how current it is, how it stays that way, and how people can filter it
 - [arkiv/friction.md](arkiv/friction.md): 14 rough edges, with steps to reproduce
 - [arkiv/schema.md](arkiv/schema.md): entities, owners and expiry
