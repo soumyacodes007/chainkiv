@@ -1,6 +1,6 @@
 // The "one more click" page: one RPC, in plain words first, with the evidence underneath and a Recheck anyone can run.
 import { useEffect, useState } from "react"
-import { ago, fmt, hostOf, ms, short, urlHash } from "../lib/format"
+import { ago, fmt, hostOf, ms, plural, short, urlHash } from "../lib/format"
 import { isStaleHead } from "../../../src/readings"
 import { assess, wasCalled } from "../lib/health"
 import { recheck, type Recheck } from "../lib/recheck"
@@ -129,6 +129,8 @@ export function RpcPage({ chainId, hash }: { chainId: string; hash: string }) {
   const { host, path } = hostOf(rpc.url)
   const stats = view.stats.filter((s) => s.url === rpc.url)
   const r = rpc.readings[0]
+  const readings = Math.max(0, ...stats.map((s) => s.samples24h))
+  const few = readings < 24 ? readings : 0
   const avg = (f: (s: (typeof stats)[number]) => number) => (stats.length ? Math.round((stats.reduce((x, s) => x + f(s), 0) / stats.length) * 1000) / 10 : null)
   const called = wasCalled(r)
   const limited = r?.verdict === "rate-limited"
@@ -181,14 +183,16 @@ export function RpcPage({ chainId, hash }: { chainId: string; hash: string }) {
                   <Ring value={avg((s) => s.uptime24h)} label="24 hours" />
                   <Ring value={avg((s) => s.uptime7d)} label="7 days" />
                 </div>
+                {few && <p className="faint ringnote">Based on {plural(few, "reading")} so far. Probers publish this every two hours.</p>}
                 <div className="stack" style={{ gap: 8, marginTop: 14 }}>
                   {stats.map((s) => {
                     const top = Math.max(...stats.map((x) => x.p95Ms), 1)
                     return (
                       <div key={s.prober} className="prange">
-                        <Addr a={s.prober} />
+                        {names.get(s.prober.toLowerCase()) ? <span className="pr-n trunc">{names.get(s.prober.toLowerCase())!.split(".probers.")[0]} prober</span> : <Addr a={s.prober} />}
                         <span className="pr-t">
-                          <i style={{ left: `${(s.p50Ms / top) * 100}%`, right: `${100 - (s.p95Ms / top) * 100}%` }} />
+                          {/* Early on, the median and the slowest are the same reading, and that still needs a mark. */}
+                          <i style={{ left: `min(${(s.p50Ms / top) * 100}%, calc(100% - 6px))`, width: `max(6px, ${((s.p95Ms - s.p50Ms) / top) * 100}%)` }} />
                         </span>
                         <span className="pr-v">
                           {ms(s.p50Ms)} – {ms(s.p95Ms)}

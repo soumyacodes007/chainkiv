@@ -7,6 +7,7 @@ import { chainlistHash, policyHash } from "./chainlist"
 import { parseFile, type ChainFile } from "./derive"
 import { isStaleHead, readingText, signerOf } from "./readings"
 import type { Anchor, ReleaseMeta } from "./release"
+import { SwarmCopy } from "./schemas"
 import { Chain, Explorer, Manifest, PrivacyPolicy, Release, ReleaseMeta as MetaSchema, Rpc, RpcHealth, RpcPrivacy, RpcStats } from "./schemas"
 import { checkChain, checkRelease, upstreamFromGitHub, type ReleaseCheck, type ReleaseInputs, type Verdict } from "./verify"
 
@@ -257,6 +258,13 @@ export function createRegistry(options: RegistryOptions) {
   const forgetRelease = () => {
     releaseCache = undefined
   }
+  /** The publisher's newest Swarm copy of a release, if there is one. */
+  const swarmCopy = async (root: string) => {
+    const rows = await readAll<any>(client, { schema: SwarmCopy, owner: await owner(), where: eq("merkleRoot", str(root)) })
+    const newest = rows.sort((a, b) => Number(val<bigint>(b.uploadedAt)! - val<bigint>(a.uploadedAt)!))[0]
+    return newest ? { reference: val<string>(newest.reference)!, uploadedAt: Number(val<bigint>(newest.uploadedAt)) } : null
+  }
+
   const releases = async () => {
     const rows = await readAll<any>(client, { schema: Release, owner: await owner() })
     return rows.map((r) => ({ releaseNo: val<bigint>(r.releaseNo)!, commit: val<string>(r.commit)!, root: val<string>(r.merkleRoot)!, chainCount: val<bigint>(r.chainCount)!, anchorNetwork: val<string>(r.anchorNetwork)!, anchorTx: val<string>(r.anchorTx) }))
@@ -265,7 +273,7 @@ export function createRegistry(options: RegistryOptions) {
 
   const toChainsJson = async () => (await everyChain()).map((c) => c.file).sort((a, b) => a.chainId - b.chainId)
 
-  return { client, trust, release, meta, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, allHealth, forgetRelease, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
+  return { client, trust, release, meta, swarmCopy, probers, getChain, findChains, rpcs, explorers, privacy, policy, verifyChainlist, allHealth, forgetRelease, health, healthyRpcs, stats, verify, verifyAll, latestRelease, releases, toChainsJson }
 }
 
 export { readingText }

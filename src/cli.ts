@@ -1,15 +1,18 @@
 #!/usr/bin/env bun
 // chainkiv: import, survey, probe, verify and query. Keys come from the environment and are never printed.
+import { SwarmCopy } from "./schemas"
+import { checkCopy, encodeBundle, STAMP_LABEL, SWARM_BEE } from "./swarm"
 import { mkdir } from "node:fs/promises"
 import { formatEther, parseEther, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
-import { str } from "@arkiv-network/sdk/schema"
+import { ExpirationTime } from "@arkiv-network/sdk"
+import { str, u64 } from "@arkiv-network/sdk/schema"
 import { LOCAL_CHAIN_ID, localNetwork, rabdiNetwork, readAll, reader, val, writer, type Network } from "./arkiv"
 import { CHAINLIST_FILE, CHAINLIST_REPO, hashRows, parseChainlist } from "./chainlist"
 import { planChainlist, readChainlistExisting } from "./chainlist-import"
 import { createRegistry } from "./client"
 import { deployResolver, ensQuote, handOver, registerName, setRecords, setupProbers, type ProberState } from "./ens"
-import { apply, plan, readExisting, withReplan, writeRelease, type Plan } from "./importer"
+import { apply, CORE_DAYS, plan, readExisting, withReplan, writeRelease, type Plan } from "./importer"
 import { loadTargets, openHistory, publishStats, runRound } from "./prober"
 import { genesisOf, merkleRoot, type ReleaseMeta } from "./release"
 import { Release } from "./schemas"
@@ -114,6 +117,14 @@ async function applyPlan(first: Plan, replan: () => Promise<Plan>, write: (work:
     batches += await write(work)
   }, { onRetry: retryNote })
   return batches
+}
+
+/** The one stamp the tools may spend. Nook's own stamp has a different label, so it's never chosen. */
+async function chainrollStamp(bee: string): Promise<string> {
+  const { stamps } = (await (await fetch(`${bee}/stamps`)).json()) as { stamps: { batchID: string; label: string; usable: boolean }[] }
+  const stamp = stamps.find((s) => s.label === STAMP_LABEL && s.usable)
+  if (!stamp) throw new Error(`No usable stamp labelled ${STAMP_LABEL}. Run: chainkiv swarm-stamp --days 7 --confirm`)
+  return stamp.batchID
 }
 
 const commands: Record<string, (flags: Record<string, string>, rest: string[]) => Promise<void>> = {
@@ -369,6 +380,46 @@ const commands: Record<string, (flags: Record<string, string>, rest: string[]) =
     await handOver(process.env.ETH_RPC_URL, account, name, resolver, registries, flags.to as Hex, RELEASE_KEYS, console.log)
   },
 
+  async "swarm-stamp"(flags) {
+    const bee = flags.bee ?? SWARM_BEE
+    const days = Number(flags.days ?? 7)
+    const { currentPrice } = (await (await fetch(`${bee}/chainstate`)).json()) as { currentPrice: string }
+    const depth = 17
+    const amount = BigInt(currentPrice) * BigInt(Math.ceil((days * 86_400) / 5))
+    const cost = Number(amount * 2n ** BigInt(depth)) / 1e16
+    if (!flags.confirm) return print({ days, depth, amount: amount.toString(), costXbzz: cost, next: "Add --confirm to buy" })
+    const response = await fetch(`${bee}/stamps/${amount}/${depth}?label=${STAMP_LABEL}`, { method: "POST" })
+    if (!response.ok) throw new Error(`The node refused: ${await response.text()}`)
+    print({ ...(await response.json() as object), days, costXbzz: cost })
+  },
+  async "swarm-save"(flags) {
+    const net = network()
+    const account = keyFor("PUBLISHER_KEY", net)
+    const reg = registry(net)
+    const check = await reg.release()
+    if (!check.anchor || !check.allLeaves) throw new Error("The latest release couldn't be read")
+    const root = check.anchor.root
+    const had = await reg.swarmCopy(root)
+    if (had) return print({ ...had, already: true })
+    const bee = flags.bee ?? SWARM_BEE
+    const stamp = flags.stamp ?? (await chainrollStamp(bee))
+    const body = encodeBundle(check.anchor, check.allLeaves, await reg.trust(), await reg.meta().catch(() => null))
+    const name = `chainroll-release-${check.anchor.releaseNo}.json`
+    const response = await fetch(`${bee}/bzz?name=${name}`, { method: "POST", headers: { "content-type": "application/json", "swarm-postage-batch-id": stamp, "swarm-deferred-upload": "false" }, body })
+    if (!response.ok) throw new Error(`The node refused the upload: ${response.status} ${(await response.text()).slice(0, 120)}`)
+    const { reference } = (await response.json()) as { reference: string }
+    console.log(`Uploaded ${reference}, reading it back through the public gateway`)
+    // Recorded only after a stranger's view of Swarm rebuilds the root.
+    let seen = { ok: false, detail: "" }
+    for (let i = 0; i < 24 && !seen.ok; i++) {
+      seen = await checkCopy(reference, root)
+      if (!seen.ok) await Bun.sleep(10_000)
+    }
+    if (!seen.ok) throw new Error(`Uploaded ${reference}, but it can't be read back yet: ${seen.detail}`)
+    const values = { merkleRoot: str(root), releaseNo: u64(BigInt(check.anchor.releaseNo)), reference: str(reference), uploadedAt: u64(BigInt(Math.floor(Date.now() / 1000))) }
+    await writer(net, account).executeBatch({ creates: [{ schema: SwarmCopy, values, expiration: ExpirationTime.fromDays(CORE_DAYS) }] })
+    print({ reference, detail: seen.detail })
+  },
   async doctor() {
     const net = network()
     const client = reader(net)
@@ -406,6 +457,8 @@ if (!command) {
   query     '<arkiv query>'
   doctor    Check network, wallets and the publisher lookup
   fund-probers --amount 1 [--from prober-a] [--dry-run]
+  swarm-stamp --days 7 [--confirm]                Show the cost of a stamp, and buy it with --confirm
+  swarm-save  [--stamp id] [--bee url]            Copy the latest release to Swarm and record it on Arkiv
   ens-register --name chainroll.eth [--dry-run]   Sepolia only
   ens-records --anchor <tx> [--release]           --release writes only what a hot key may
   ens-probers                                     Give each prober a subname

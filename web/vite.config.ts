@@ -1,9 +1,9 @@
-import { execSync } from "node:child_process"
+import { execSync, spawn } from "node:child_process"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import react from "@vitejs/plugin-react"
 import { privateKeyToAddress } from "viem/accounts"
-import { defineConfig, loadEnv } from "vite"
+import { defineConfig, loadEnv, type Plugin } from "vite"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repo = resolve(here, "..")
@@ -27,6 +27,33 @@ const githubToken = (env: Record<string, string>) => {
   }
 }
 
+/** Local only: Save to Swarm needs the publisher's key, which stays on this machine and never reaches the browser. */
+const swarmSave = (): Plugin => ({
+  name: "chainroll-swarm-save",
+  apply: "serve",
+  configureServer(server) {
+    server.middlewares.use("/__swarm-save", (req, res) => {
+      const reply = (status: number, body: object) => {
+        res.statusCode = status
+        res.setHeader("content-type", "application/json")
+        res.end(JSON.stringify(body))
+      }
+      // A page on another site can't set this header without permission, so it can't spend the stamp.
+      if (req.method !== "POST" || req.headers["x-chainroll"] !== "1") return reply(403, { error: "Not allowed" })
+      let out = ""
+      let err = ""
+      const job = spawn("bun run --conditions browser src/cli.ts swarm-save", { cwd: repo, shell: true })
+      job.stdout.on("data", (d) => (out += d))
+      job.stderr.on("data", (d) => (err += d))
+      job.on("close", (code) => {
+        const reference = /"reference":\s*"([0-9a-f]+)"/.exec(out)?.[1]
+        if (code === 0 && reference) reply(200, { reference })
+        else reply(500, { error: err.trim().split("\n").at(-1)?.slice(0, 200) || "The upload failed" })
+      })
+    })
+  },
+})
+
 export default defineConfig(({ mode, command }) => {
   // Reads the repo's .env.local. Only VITE_ values and the addresses below reach the browser, never a key.
   const env = loadEnv(mode, repo, "")
@@ -35,7 +62,7 @@ export default defineConfig(({ mode, command }) => {
   return {
     root: here,
     envDir: repo,
-    plugins: [react()],
+    plugins: [react(), swarmSave()],
     resolve: { conditions: ["browser"] },
     define: {
       "import.meta.env.VITE_CHAINKIV_PUBLISHER": JSON.stringify(env.VITE_CHAINKIV_PUBLISHER || addressOf(env.PUBLISHER_KEY)),

@@ -6,7 +6,8 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
 import { checkedBlock, LIMIT_MESSAGE } from "../src/probe"
 import { counted, lagOf, probeGently, uniqueTargets } from "../src/prober"
 import { isStaleHead, readingText, signerOf } from "../src/readings"
-import { genesisOf } from "../src/release"
+import { genesisOf, merkleRoot } from "../src/release"
+import { encodeBundle, verifyBundle } from "../src/swarm"
 import type { Source } from "../src/source"
 import { MAX_LAG_BLOCKS, verdictOf } from "../src/survey"
 
@@ -225,5 +226,30 @@ describe("probers", () => {
   test("limits sent as RPC errors are recognised, and a real error is not", () => {
     for (const text of ["you reached public endpoint limit", "rate limit exceeded", "Too Many Requests", "daily quota used"]) expect(LIMIT_MESSAGE.test(text)).toBe(true)
     for (const text of ["the method eth_getBlockByNumber does not exist/is not available", "execution reverted", "gas limit too low"]) expect(LIMIT_MESSAGE.test(text)).toBe(false)
+  })
+})
+
+describe("swarm", () => {
+  const leaves = [{ chainId: 1n, shortName: "eth", sourceBlob: "a".repeat(40) }, { chainId: 2n, shortName: "two", sourceBlob: "b".repeat(40) }]
+  const root = merkleRoot(leaves)
+  const anchor = { releaseNo: "1", commit: "c".repeat(40), root, chainCount: 2, metaHash: "0x00" }
+  const trust = { publisher: "0xp", anchorTx: "0xa" as const, source: "chainroll.eth" }
+
+  test("a bundle proves itself against the signed root", () => {
+    expect(verifyBundle(encodeBundle(anchor, leaves, trust, null), root)).toEqual({ ok: true, detail: "2 chains rebuild the signed root" })
+  })
+
+  test("a release that doesn't match its root can't be packed", () => {
+    expect(() => encodeBundle({ ...anchor, root: "0xbad" }, leaves, trust, null)).toThrow("signed root")
+  })
+
+  test("a changed copy is refused, even with the right root written in it", () => {
+    const changed = encodeBundle(anchor, leaves, trust, null).replace('"eth"', '"evil"')
+    expect(verifyBundle(changed, root).ok).toBe(false)
+  })
+
+  test("a file that isn't a release is refused", () => {
+    expect(verifyBundle("<html>", root).ok).toBe(false)
+    expect(verifyBundle("{}", root).ok).toBe(false)
   })
 })

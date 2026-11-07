@@ -1018,6 +1018,10 @@ a.fnode:hover {
   border-radius: 2px;
   background: var(--accent);
 }
+.pr-n {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+}
 .pr-v {
   color: var(--text-2);
   font-size: var(--fs-xs);
@@ -2264,5 +2268,90 @@ a.tstep:focus-visible {
     grid-template-columns: minmax(0, 1fr);
     gap: 2px;
     padding: 6px 12px;
+  }
+}
+
+/* ---- swarm backup ------------------------------------------------------------------------------- */
+.swm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.swm.on {
+  border-color: var(--green);
+}
+.swm-i {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.swm.on .swm-i {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.swm-t {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.swm-d {
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.swm-d a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.swm-step + .swm-step {
+  margin-top: 16px;
+}
+.swm-step h3 {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.swm-pack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.swm-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+  font-size: var(--fs-sm);
+}
+.swm-bad {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: var(--fs-sm);
+}
+.swm-f {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.swm-f label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+@media (max-width: 640px) {
+  .swm {
+    flex-wrap: wrap;
   }
 }

@@ -84,6 +84,13 @@ export const Manifest = defineSchema("chainkiv.manifest", {
   data: bytes(),
 })
 
+export const SwarmCopy = defineSchema("chainkiv.swarmCopy", {
+  merkleRoot: str().indexed(),
+  releaseNo: u64().indexed(),
+  reference: str(),
+  uploadedAt: u64(),
+})
+
 export const ReleaseMeta = defineSchema("chainkiv.releaseMeta", {
   metaHash: str().indexed(),
   data: bytes(),

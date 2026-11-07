@@ -6,6 +6,7 @@ import { useStore } from "../lib/store"
 import { useRelease } from "../lib/useRelease"
 import { I } from "../ui/icons"
 import { Addr, Empty, Panel } from "../ui/kit"
+import { SwarmBackup } from "../ui/swarmBackup"
 
 type Row = Awaited<ReturnType<typeof reg.releases>>[number]
 
@@ -80,6 +81,7 @@ export function Releases() {
                     </a>
                   )}
                 </div>
+                <SwarmBackup root={r.root} latest={i === 0} />
               </div>
             </div>
           ))}
