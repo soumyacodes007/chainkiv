@@ -2296,3 +2296,37 @@ a.tstep:focus-visible {
     animation: none;
   }
 }
+
+.qrows {
+  margin-top: 8px;
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+}
+.qrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px 170px;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--divider);
+  font-size: var(--fs-sm);
+}
+.qrow:first-child {
+  border-top: 0;
+}
+.qrow b {
+  font-weight: 500;
+}
+.qrow a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+@media (max-width: 640px) {
+  .qrow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    padding: 6px 12px;
+  }
+}

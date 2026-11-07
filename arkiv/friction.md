@@ -279,3 +279,15 @@ Windows 11, 17 Oct 2026.
 - **Cause:** default transport retries can wait out the node's long Retry-After. Heartbeat progress alone does not show that deadlines are being processed. A Promise.race timeout cannot cancel its losing pass.
 - **Fix:** RPC clients never retry 429; gateway retries remain bounded by the request timeout. The CLI watches startup and completed block progress and exits after 120 seconds without progress; Use Railway restart policy ALWAYS where available; the trial plan only supports ON_FAILURE with 10 retries. Keep tick serialization until the pass actually finishes, and never treat quota failures as a missing target.
 - **Checks:** test/progress.test.ts covers stalled, advancing, and stopped watchdogs; test/sdk-unit.test.ts covers gateway retries and a quota refusal through the actual viem transport.
+
+### 17. `eth_getLogs` fails now and then with an internal storage error (7 Nov 2026)
+
+- **Expected:** one block's logs for one entity key, which is the cheapest way to find the transaction behind a record.
+- **What happened:** on Rabdi, the same call on the same block sometimes returned the log and sometimes
+  `-32603 golemdb segment_range_of(transactions): NotImplemented`. In one run it failed for three of four records in a
+  row, and one of those records was in the same block as a record that worked. We did not count how often it happens.
+- **Why it matters:** an app that treats the error as "no logs" shows a record with no transaction. Ours did at first.
+- **Reproduce:** send `eth_getLogs` with `fromBlock` and `toBlock` set to one block and `topics: [null, <entityKey>]`,
+  repeated for several records.
+- **What we did:** retry, then fall back to the block's transactions and their receipts, which never failed in 28
+  lookups. That costs several reads instead of one, which matters on the keyless budget.

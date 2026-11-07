@@ -3,7 +3,7 @@
 // Health sits outside the signed release, so it has its own dashed strip and never counts towards the path.
 import { useEffect, useState } from "react"
 import { ago, fmt, short } from "../lib/format"
-import { ETH_EXPLORER, ETH_NETWORK, publisherName, reg, type Step } from "../lib/registry"
+import { ARKIV_EXPLORER, ETH_EXPLORER, ETH_NETWORK, publisherName, reg, type Step } from "../lib/registry"
 import type { ChainRow, RpcRow } from "../lib/types"
 import type { Check } from "../lib/useVerdict"
 import { STEP_ICON } from "./checks"
@@ -122,7 +122,7 @@ export function TrustMap({ chain, check, rpcs }: { chain: ChainRow; check: Check
     { n: 1, lane: "Ethereum", title: "ENS name", value: publisherName || "Not set", sub: `Names ${short(publisher) || "…"}`, href: publisherName ? `https://${ETH_NETWORK === "mainnet" ? "" : "sepolia."}app.ens.domains/${publisherName}` : undefined, status: at(1) },
     { n: 2, lane: "Ethereum", title: "Signed transaction", value: short(anchorTx) || "…", sub: verdict?.release ? `Release ${verdict.release}` : undefined, href: anchorTx ? `${ETH_EXPLORER}/tx/${anchorTx}` : undefined, status: at(2) },
     { n: 3, lane: "Arkiv", title: "Signed chain list", value: manifest ? `${fmt(Number(manifest))} chains` : "…", sub: "Rebuilt here, matches the root", status: at(3) },
-    { n: 4, lane: "Arkiv", title: `${chain.name}'s record`, value: short(entity) || "…", sub: "Its record on Arkiv", status: at(4) },
+    { n: 4, lane: "Arkiv", title: `${chain.name}'s record`, value: short(entity) || "…", sub: "Its record on Arkiv", href: entity ? `${ARKIV_EXPLORER}/entity/${entity}` : undefined, status: at(4) },
     { n: 5, lane: "GitHub", title: "Upstream file", value: verdict?.commit?.slice(0, 7) ?? "…", sub: blob ? `Git blob ${blob.slice(0, 8)}` : undefined, href: verdict?.commit ? `https://github.com/ethereum-lists/chains/commit/${verdict.commit}` : undefined, status: at(5) },
   ]
 

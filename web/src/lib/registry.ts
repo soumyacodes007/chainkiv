@@ -21,6 +21,7 @@ export const ETH_NETWORK = (env.VITE_ETH_NETWORK as string | undefined) || "sepo
 export const ETH_EXPLORER = ETH_NETWORK === "mainnet" ? "https://etherscan.io" : "https://sepolia.etherscan.io"
 
 const chain = rabdi({ accessKey: "" })
+export const ARKIV_EXPLORER = chain.blockExplorers.default.url
 const network: Network = { chain, url: env.VITE_ARKIV_PROXY ? `${location.origin}/arkiv-rpc` : chain.rpcUrls.default.http[0]!, name: "rabdi" }
 const ethChain = ETH_NETWORK === "mainnet" ? mainnet : sepolia
 const ethereumAt = (url?: string) => createPublicClient({ chain: ethChain, transport: http(url, { retryCount: 1, timeout: 20_000 }) }) as any
@@ -32,6 +33,22 @@ const second = ethereumAt(SECOND)
 
 /** Ethereum couldn't name the publisher. Arkiv may be fine, so this is reported separately. */
 export class TrustFailure extends Error {}
+
+/** The transaction that last wrote a record. Logs answer in one call, but Rabdi's nodes fail that call now and then. */
+export async function writeTxOf(key: string, block: string, owner: string): Promise<string> {
+  const request = reg.client.request as (call: { method: string; params: unknown[] }) => Promise<any>
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const logs = (await request({ method: "eth_getLogs", params: [{ fromBlock: block, toBlock: block, topics: [null, key] }] }).catch(() => null)) as { transactionHash: string }[] | null
+    if (logs?.length) return logs.at(-1)!.transactionHash
+  }
+  // The slow way always works: the owner's transactions in that block, and the one whose logs name this key.
+  const found = (await request({ method: "eth_getBlockByNumber", params: [block, true] })) as { transactions: { hash: string; from: string }[] } | null
+  for (const tx of (found?.transactions ?? []).filter((t) => t.from.toLowerCase() === owner.toLowerCase())) {
+    const receipt = (await request({ method: "eth_getTransactionReceipt", params: [tx.hash] })) as { logs: { topics: string[] }[] }
+    if (receipt.logs.some((l) => l.topics.includes(key))) return tx.hash
+  }
+  return ""
+}
 
 export const hasPublisher = !!(ENS || PUBLISHER)
 export const publisherName = ENS || ""

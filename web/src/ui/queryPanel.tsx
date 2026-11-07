@@ -1,15 +1,16 @@
 // Shows the Arkiv query behind the current filters, and runs it from this browser. Only clauses Arkiv really answers are
 // shown. Fuzzy text, and anything worked out from health, is named as browser work instead of being dressed up as a query.
 import { useEffect, useMemo, useState } from "react"
-import { fmt } from "../lib/format"
-import { reg } from "../lib/registry"
+import { fmt, short } from "../lib/format"
+import { ARKIV_EXPLORER, reg, writeTxOf } from "../lib/registry"
 import { I } from "./icons"
 import { copy, cx } from "./kit"
 
 export type Filters = { q: string; kind: string; layer: string; status: string; flag: string }
 
 const PAGE = 100
-const SELECT = { key: true, owner: false, creator: false, createdAt: false, updatedAt: false, expiresAt: false, creationFlags: false, attributeSchema: false, attributes: { name: true } }
+const SHOWN = 4
+const SELECT = { key: true, owner: true, creator: false, createdAt: false, updatedAt: true, expiresAt: false, creationFlags: false, attributeSchema: false, attributes: { name: true } }
 
 /** Text goes inside str('…'), so anything that could end the string stays out of the query. */
 const safe = (text: string) => !/['\\]/.test(text)
@@ -34,7 +35,9 @@ function browserWork({ q, kind, flag }: Filters) {
   return out
 }
 
-type Result = { rows: number; more: boolean; ms: number; names: string[] } | { error: string }
+type Row = { key: string; name: string; tx: string | null }
+type Answer = { data: { key: string; owner: string; updatedAt: string; attributes: { name: string; value: string }[] }[]; cursor?: string }
+type Result = { rows: number; more: boolean; ms: number; list: Row[] } | { error: string }
 
 export function QueryPanel({ filters }: { filters: Filters }) {
   const [owner, setOwner] = useState("")
@@ -56,8 +59,18 @@ export function QueryPanel({ filters }: { filters: Filters }) {
     setBusy(true)
     const started = performance.now()
     try {
-      const answer = (await reg.client.request({ method: "arkiv_query", params: [query, { select: SELECT, limit: `0x${PAGE.toString(16)}` }] })) as { data: { attributes: { name: string; value: string }[] }[]; cursor?: string }
-      setResult({ rows: answer.data.length, more: !!answer.cursor && answer.data.length === PAGE, ms: Math.round(performance.now() - started), names: answer.data.slice(0, 4).map((d) => d.attributes.find((a) => a.name === "name")?.value ?? "") })
+      const answer = (await reg.client.request({ method: "arkiv_query", params: [query, { select: SELECT, limit: `0x${PAGE.toString(16)}` }] })) as Answer
+      const ms = Math.round(performance.now() - started)
+      const first = answer.data.slice(0, SHOWN)
+      const list: Row[] = first.map((d) => ({ key: d.key, name: d.attributes.find((a) => a.name === "name")?.value ?? "", tx: null }))
+      const shown = { rows: answer.data.length, more: !!answer.cursor && answer.data.length === PAGE, ms }
+      setResult({ ...shown, list })
+      // One at a time, because a visitor without an access key has a small budget.
+      for (const [i, d] of first.entries()) {
+        const tx = await writeTxOf(d.key, d.updatedAt, d.owner).catch(() => "")
+        list[i] = { ...list[i]!, tx }
+        setResult({ ...shown, list: [...list] })
+      }
     } catch (e) {
       const text = (e as Error).message
       setResult({ error: /429/.test(text) ? "Arkiv is limiting reads from this browser. Try again in a minute." : text.split("\n")[0]!.slice(0, 140) })
@@ -103,12 +116,37 @@ export function QueryPanel({ filters }: { filters: Filters }) {
             ("error" in result ? (
               <p className="qr bad">{result.error}</p>
             ) : (
-              <p className="qr">
-                <I n="check" s={13} />
-                <span>
-                  Arkiv returned <b>{result.more ? `${fmt(PAGE)}+ records` : `${fmt(result.rows)} ${result.rows === 1 ? "record" : "records"}`}</b> in {fmt(result.ms)} ms{result.names.length ? `: ${result.names.join(", ")}${result.rows > 4 ? "…" : ""}` : ""}
-                </span>
-              </p>
+              <>
+                <p className="qr">
+                  <I n="check" s={13} />
+                  <span>
+                    Arkiv returned <b>{result.more ? `${fmt(PAGE)}+ records` : `${fmt(result.rows)} ${result.rows === 1 ? "record" : "records"}`}</b> in {fmt(result.ms)} ms{result.rows > SHOWN ? `. First ${SHOWN} shown` : ""}
+                  </span>
+                </p>
+                {result.list.length > 0 && (
+                  <div className="qrows">
+                    {result.list.map((row) => (
+                      <div key={row.key} className="qrow">
+                        <b className="trunc">{row.name}</b>
+                        <a className="lnk" href={`${ARKIV_EXPLORER}/entity/${row.key}`} target="_blank" rel="noreferrer">
+                          Record {short(row.key)}
+                          <I n="arrow-up-right" s={12} />
+                        </a>
+                        {row.tx === null ? (
+                          <span className="faint">Finding transaction…</span>
+                        ) : row.tx ? (
+                          <a className="lnk" href={`${ARKIV_EXPLORER}/tx/${row.tx}`} target="_blank" rel="noreferrer">
+                            Tx {short(row.tx)}
+                            <I n="arrow-up-right" s={12} />
+                          </a>
+                        ) : (
+                          <span className="faint">Transaction not found</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             ))}
         </div>
       )}
