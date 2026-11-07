@@ -15,6 +15,7 @@ export type Reading = {
   blockNumber: string
   blockHash: string
   genesisSeen: string
+  blockTime?: number
   error: string
   verdict?: Verdict
   outcome?: string

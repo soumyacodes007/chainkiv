@@ -57,6 +57,27 @@ export function openHistory(path: string) {
   return db
 }
 
+/** Long enough for most public limits to let the next call through. */
+const RETRY_GAP_MS = 1_500
+
+/**
+ * Shared gateways limit by caller, and a round hits one host for dozens of chains. Anything limited gets a second,
+ * gentler try, one call at a time per host. Some gateways refuse every anonymous call however slowly you ask, so a host
+ * that is still limiting on its retry is left alone for the rest of the round.
+ */
+export async function probeGently<T extends Target>(targets: T[], probe: (t: T) => Promise<Reading>, gapMs = RETRY_GAP_MS): Promise<Reading[]> {
+  const first = await pool(targets, 32, 4, (t) => hostOf(t.url), probe)
+  const limited = targets.map((t, i) => ({ t, i })).filter(({ i }) => first[i]!.outcome === "rate-limited")
+  const refusing = new Set<string>()
+  await pool(limited, 8, 1, ({ t }) => hostOf(t.url), async ({ t, i }) => {
+    if (refusing.has(hostOf(t.url))) return
+    await Bun.sleep(gapMs)
+    first[i] = await probe(t)
+    if (first[i]!.outcome === "rate-limited") refusing.add(hostOf(t.url))
+  })
+  return first
+}
+
 export type Round = { probed: number; up: number; created: number; patched: number; seconds: number }
 
 export async function runRound(opts: {
@@ -70,7 +91,7 @@ export async function runRound(opts: {
 }): Promise<Round> {
   const { client, wallet, account, region, targets, genesis, history } = opts
   const start = Date.now()
-  const readings = await pool(targets, 32, 4, (t) => hostOf(t.url), (t) => probeOnline(t.chainId, t.url))
+  const readings = await probeGently(targets, (t) => probeOnline(t.chainId, t.url))
 
   const byChain = new Map<string, Reading[]>()
   for (const r of readings) {
@@ -104,12 +125,13 @@ export async function runRound(opts: {
         blockNumber: r.blockNumber,
         blockHash: r.blockHash,
         genesisSeen: r.genesisSeen,
+        blockTime: BigInt(r.blockTime),
       }
       const sig = await account.signMessage({ message: readingText(fields) })
       const values = {
         chainId: u64(fields.chainId), url: str(fields.url), region: str(region), up: bool(fields.up), chainIdOk: bool(fields.chainIdOk),
         genesis: str(fields.genesis), latencyMs: i32(fields.latencyMs), lagBlocks: i32(fields.lagBlocks), checkedAt: u64(fields.checkedAt),
-        blockNumber: u64(fields.blockNumber), blockHash: str(fields.blockHash), genesisSeen: str(fields.genesisSeen),
+        blockNumber: u64(fields.blockNumber), blockTime: u64(fields.blockTime), blockHash: str(fields.blockHash), genesisSeen: str(fields.genesisSeen),
         error: str(fit(r.error)), proberVersion: str(VERSION), sig: bytes(hexToBytes(sig as Hex)),
       }
       const key = keys.get(`${r.chainId}|${r.url}`)

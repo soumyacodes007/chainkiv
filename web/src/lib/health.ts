@@ -1,5 +1,6 @@
 // Turns readings into the one thing a person wants to know about an RPC. The rules are the PRD's badges.
 // Green always means "passed checks", never "safe".
+import { isStaleHead } from "../../../src/readings"
 import type { Reading, RpcRow, Verdict } from "./types"
 
 export type Tone = "green" | "teal" | "amber" | "violet" | "red" | "gray"
@@ -16,7 +17,7 @@ export const works = (t: Tone) => t === "green" || t === "teal"
 export const GROUPS: { key: string; label: string; color: string; verdicts: string[] }[] = [
   { key: "passed", label: "Passed checks", color: "var(--green)", verdicts: ["passed"] },
   { key: "unconfirmed", label: "Works, first block unconfirmed", color: "var(--teal)", verdicts: ["unconfirmed"] },
-  { key: "behind", label: "Stale, limited or disputed", color: "var(--amber)", verdicts: ["stale", "rate-limited", "split"] },
+  { key: "behind", label: "Stale, limited or disputed", color: "var(--amber)", verdicts: ["stale", "rate-limited", "split", "partial"] },
   { key: "wrong", label: "Wrong chain or genesis", color: "var(--violet)", verdicts: ["wrong-chain", "wrong-genesis"] },
   { key: "down", label: "Not answering", color: "var(--red)", verdicts: ["down"] },
   { key: "gray", label: "Not checkable", color: "var(--text-4)", verdicts: ["needs-key", "refused", "none"] },
@@ -35,9 +36,14 @@ const SURVEY: Record<Verdict, [Tone, string, string]> = {
   refused: ["gray", "Not checked", "Points at a private address, so we refuse to call it"],
 }
 
+// Matches the prober's rule. Probe code can't load in a browser, so the words are repeated here.
+const LIMIT_MESSAGE = /rate.?limit|too many requests|reached .*limit|limit (exceeded|reached)|quota/i
 const failed = (r: Reading) => !r.up || !r.chainIdOk || r.genesis === "bad"
 /** PRD edge 29: a 429 says the RPC is busy, not that it is down. */
-const limited = (r: Reading) => r.error === "HTTP 429"
+const limited = (r: Reading) => r.error === "HTTP 429" || LIMIT_MESSAGE.test(r.error)
+/** Gave its chain ID, then failed a later check. It is there, so "not answering" would be wrong. */
+const partial = (r: Reading) => !r.up && r.chainIdOk
+const hoursOld = (r: Reading) => Math.round((r.checkedAt - (r.blockTime ?? r.checkedAt)) / 3600)
 
 /** Was the RPC actually called? False for ones we refuse to call or can't call without a key. */
 export const wasCalled = (r?: Reading) => !!r && r.verdict !== "needs-key" && r.verdict !== "refused"
@@ -65,14 +71,16 @@ export function assess(rpc: RpcRow): Assessment {
   if (!pass.length && !fail.length) return { tone: "amber", verdict: "rate-limited", label: "Rate limited", detail: SURVEY["rate-limited"][2] }
   const latency = pass.length ? Math.min(...pass.map((r) => r.latencyMs)) : undefined
   if (pass.length && fail.length) return { tone: "amber", verdict: "split", label: "Probers disagree", detail: `${pass.length} passed, ${fail.length} failed`, latency }
+  if (pass.length && pass.every(isStaleHead)) return { tone: "amber", verdict: "stale", label: "Stale head", detail: hoursOld(pass[0]!) ? `Answers, but its newest block is ${hoursOld(pass[0]!)} h old` : "Answers, but it is far behind other RPCs", latency }
   if (pass.length && pass.every((r) => r.genesis === "unknown")) return { tone: "teal", verdict: "unconfirmed", label: "Works, unconfirmed", detail: "Too few RPCs responded to agree on its first block", latency }
   if (pass.length >= 2 && latency! <= SLOW_MS) return { tone: "green", verdict: "passed", label: "Passed checks", detail: `Passed from ${pass.length} probers`, latency }
   if (pass.length) return { tone: "amber", verdict: "passed", label: latency! > SLOW_MS ? "Slow" : "Passed, one prober", detail: `Passed from ${pass.length} prober${pass.length > 1 ? "s" : ""}`, latency }
   const r = fail[0]!
   const wrong = r.up && !r.chainIdOk ? "Wrong chain" : r.genesis === "bad" ? "Wrong genesis" : ""
-  const why = wrong || "Not answering"
+  const half = !wrong && fail.every(partial)
+  const why = wrong || (half ? "Partly answering" : "Not answering")
   return fail.length >= 2
-    ? { tone: wrong ? "violet" : "red", verdict: wrong ? "wrong-chain" : "down", label: why, detail: `Failed from ${fail.length} probers` }
+    ? { tone: wrong ? "violet" : half ? "amber" : "red", verdict: wrong ? "wrong-chain" : half ? "partial" : "down", label: why, detail: half ? `Gave its chain ID, then failed: ${r.error}` : `Failed from ${fail.length} probers` }
     : { tone: "amber", verdict: "split", label: `${why}, one prober`, detail: "A second prober has to agree before this turns red" }
 }
 

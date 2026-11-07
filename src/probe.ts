@@ -3,7 +3,7 @@
 import { lookup } from "node:dns/promises"
 import { isIP } from "node:net"
 
-export const VERSION = "0.1.0"
+export const VERSION = "0.2.0"
 const USER_AGENT = `chainkiv-prober/${VERSION} (+https://github.com/soumyacodes007/chainkiv)`
 const TIMEOUT_MS = 5_000
 // A full Ethereum block listing only hashes passed 100 KB in testing, so this has to stay well above that.
@@ -83,6 +83,7 @@ function classify(error: unknown): ProbeError {
 }
 
 type Call = (method: string, params: unknown[]) => Promise<unknown>
+export const LIMIT_MESSAGE = /rate.?limit|too many requests|reached .*limit|limit (exceeded|reached)|quota/i
 
 function httpCall(url: string): Call {
   let id = 0
@@ -108,7 +109,11 @@ function parseRpc(text: string): unknown {
   } catch {
     throw new ProbeError("bad-response", "response is not JSON")
   }
-  if (body?.error) throw new ProbeError("rpc-error", String(body.error.message ?? "RPC error").slice(0, 100))
+  if (body?.error) {
+    const message = String(body.error.message ?? "RPC error").slice(0, 100)
+    // Some providers send their limit as a normal RPC error, and that says busy, not down.
+    throw new ProbeError(LIMIT_MESSAGE.test(message) ? "rate-limited" : "rpc-error", message)
+  }
   if (body?.result === undefined || body.result === null) throw new ProbeError("bad-response", "empty result")
   return body.result
 }

@@ -1,6 +1,7 @@
 // A read-only survey of every listed RPC. Needs no wallet. Anything that fails is tried once more later, so a brief
 // network problem on this machine is not counted as a dead RPC.
 import { pool, probeOnline, type Reading } from "./probe"
+import { isStaleHead } from "./readings"
 import type { Source } from "./source"
 
 export type Verdict = "passed" | "unconfirmed" | "wrong-chain" | "wrong-genesis" | "stale" | "down" | "rate-limited" | "needs-key" | "refused"
@@ -32,9 +33,7 @@ export const hostOf = (url: string) => {
   }
 }
 
-const STALE_SECONDS = 3600
-/** Further behind the best head than any healthy node would be. */
-export const MAX_LAG_BLOCKS = 1000
+export { MAX_LAG_BLOCKS } from "./readings"
 
 export function verdictOf(r: Reading, agreed: string | null, lagBlocks = 0): Verdict {
   if (r.outcome === "skipped") return "needs-key"
@@ -43,7 +42,7 @@ export function verdictOf(r: Reading, agreed: string | null, lagBlocks = 0): Ver
   if (r.reportedChainId !== null && !r.chainIdOk) return "wrong-chain"
   if (!r.up) return "down"
   if (agreed && r.genesisSeen && r.genesisSeen !== agreed) return "wrong-genesis"
-  if ((r.blockTime && r.checkedAt - r.blockTime > STALE_SECONDS) || lagBlocks >= MAX_LAG_BLOCKS) return "stale"
+  if (isStaleHead({ ...r, lagBlocks })) return "stale"
   // With no agreed first block, or none from this RPC, the genesis check did not run, so this is never a pass.
   return agreed && r.genesisSeen ? "passed" : "unconfirmed"
 }

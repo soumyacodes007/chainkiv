@@ -49,6 +49,7 @@ export const RpcHealth = defineSchema("chainkiv.rpcHealth", {
   lagBlocks: i32().indexed(),
   checkedAt: u64().indexed(),
   blockNumber: u64(),
+  blockTime: u64().optional(),
   blockHash: str(),
   genesisSeen: str(),
   error: str(),

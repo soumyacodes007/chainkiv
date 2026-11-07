@@ -5,7 +5,7 @@ import { keccak256, type Hex } from "viem"
 import { reader, readAll, toBytes, val, type Network } from "./arkiv"
 import { chainlistHash, policyHash } from "./chainlist"
 import { parseFile, type ChainFile } from "./derive"
-import { readingText, signerOf } from "./readings"
+import { isStaleHead, readingText, signerOf } from "./readings"
 import type { Anchor, ReleaseMeta } from "./release"
 import { Chain, Explorer, Manifest, PrivacyPolicy, Release, ReleaseMeta as MetaSchema, Rpc, RpcHealth, RpcPrivacy, RpcStats } from "./schemas"
 import { checkChain, checkRelease, upstreamFromGitHub, type ReleaseCheck, type ReleaseInputs, type Verdict } from "./verify"
@@ -28,6 +28,7 @@ export type ExplorerRow = { name: string; url: string; standard: string }
 
 export type Health = {
   chainId: bigint
+  blockTime?: number
   prober: string
   url: string
   region: string
@@ -183,11 +184,12 @@ export function createRegistry(options: RegistryOptions) {
           chainId: val<bigint>(r.chainId)!, url: val<string>(r.url)!, up: val<boolean>(r.up)!, chainIdOk: val<boolean>(r.chainIdOk)!, genesis: val<string>(r.genesis)!,
           latencyMs: val<number>(r.latencyMs)!, lagBlocks: val<number>(r.lagBlocks)!, checkedAt: val<bigint>(r.checkedAt)!,
           blockNumber: val<bigint>(r.blockNumber)!, blockHash: val<string>(r.blockHash)!, genesisSeen: val<string>(r.genesisSeen)!,
+          ...(r.blockTime ? { blockTime: val<bigint>(r.blockTime)! } : {}),
         }
         const sig = val<string>(r.sig) as Hex
         const signer = await signerOf(fields, sig).catch(() => "")
         if (signer.toLowerCase() !== prober.toLowerCase()) return null
-        return { ...fields, prober, region: val<string>(r.region)!, error: val<string>(r.error) ?? "", checkedAt: Number(fields.checkedAt) } as Health
+        return { ...fields, prober, region: val<string>(r.region)!, error: val<string>(r.error) ?? "", checkedAt: Number(fields.checkedAt), ...(fields.blockTime === undefined ? {} : { blockTime: Number(fields.blockTime) }) } as Health
       }))
       return checked.filter((h): h is Health => h !== null)
     }))
@@ -203,7 +205,7 @@ export function createRegistry(options: RegistryOptions) {
     const now = Date.now() / 1000
     const passing = new Map<string, Health[]>()
     for (const h of readings) {
-      if (!h.up || !h.chainIdOk || h.genesis !== "ok" || now - h.checkedAt > maxAgeSeconds) continue
+      if (!h.up || !h.chainIdOk || h.genesis !== "ok" || isStaleHead(h) || now - h.checkedAt > maxAgeSeconds) continue
       if (!passing.has(h.url)) passing.set(h.url, [])
       passing.get(h.url)!.push(h)
     }

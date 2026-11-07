@@ -132,7 +132,8 @@ export function RpcPage({ chainId, hash }: { chainId: string; hash: string }) {
   const called = wasCalled(r)
   const limited = r?.verdict === "rate-limited"
   const measured = called && !limited
-  const stale = r?.verdict === "stale" || (r?.lagBlocks ?? 0) >= 100
+  const oldHead = r?.verdict === "stale" || (!!r && isStaleHead(r))
+  const stale = oldHead || (r?.lagBlocks ?? 0) >= 100
   const skip = rpc.needsApiKey ? "Not called, because it needs a private API key" : r?.verdict === "refused" ? "Not called, because it points at a private address" : limited ? "It asked us to slow down, so we didn't count this" : "Not measured yet"
   const blocked = rpc.needsApiKey ? "Recheck is off, because this URL needs a private API key." : r?.verdict === "refused" ? "Recheck is off, because this URL points at a private address." : undefined
   return (
@@ -169,7 +170,7 @@ export function RpcPage({ chainId, hash }: { chainId: string; hash: string }) {
               <Check tone={!measured ? "wait" : r!.up ? "ok" : "bad"} title="Is it answering?" text={!measured ? skip : r!.up ? "It answered" : (r!.error || "No answer")} />
               <Check tone={!measured || !r!.up ? "wait" : r!.chainIdOk ? "ok" : "bad"} title="Is it the right chain?" text={!measured || !r!.up ? "Needs an answer first" : r!.chainIdOk ? `Reports chain ${chainId}` : "Reports a different chain ID"} />
               <Check tone={!measured || !r!.up ? "wait" : r!.genesis === "bad" ? "bad" : r!.genesis === "ok" ? "ok" : "wait"} title="Is the first block the agreed one?" text={!measured || !r!.up ? "Needs an answer first" : r!.genesis === "bad" ? "Different from what other RPCs report" : r!.genesis === "ok" ? "Matches what other RPCs report" : "Too few RPCs answered to agree on one"} />
-              <Check tone={!measured || !r!.up ? "wait" : stale ? "bad" : "ok"} title="Is it keeping up?" text={!measured || !r!.up ? "Needs an answer first" : r!.verdict === "stale" ? "Its newest block is over an hour old" : r!.lagBlocks > 0 ? `${fmt(r!.lagBlocks)} blocks behind the highest head seen` : "At the highest head seen"} />
+              <Check tone={!measured || !r!.up ? "wait" : stale ? "bad" : "ok"} title="Is it keeping up?" text={!measured || !r!.up ? "Needs an answer first" : oldHead ? "Its newest block is over an hour old" : r!.lagBlocks > 0 ? `${fmt(r!.lagBlocks)} blocks behind the highest head seen` : "At the highest head seen"} />
             </div>
           </Panel>
           <Panel title="Uptime and speed" sub={stats.length ? `From ${stats.length} prober${stats.length > 1 ? "s" : ""}` : "Probers publish this hourly from their own history"}>

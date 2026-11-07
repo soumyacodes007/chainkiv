@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { planChainlist } from "../src/chainlist-import"
 import { deriveChain, deriveExplorers, deriveRpcs, parseFile } from "../src/derive"
 import { apply, plan, splitDuplicates, withReplan, type Existing } from "../src/importer"
-import { checkedBlock } from "../src/probe"
-import { counted, lagOf, uniqueTargets } from "../src/prober"
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts"
+import { checkedBlock, LIMIT_MESSAGE } from "../src/probe"
+import { counted, lagOf, probeGently, uniqueTargets } from "../src/prober"
+import { isStaleHead, readingText, signerOf } from "../src/readings"
 import { genesisOf } from "../src/release"
 import type { Source } from "../src/source"
 import { MAX_LAG_BLOCKS, verdictOf } from "../src/survey"
@@ -145,5 +147,83 @@ describe("verdicts", () => {
 
   test("the signed genesis list leaves out chains with no agreement", () => {
     expect(genesisOf({ "1": { hash: "0xa" }, "2": { hash: null } })).toEqual({ "1": "0xa" })
+  })
+})
+
+describe("probers", () => {
+  const reading = (outcome: string) => ({ outcome }) as never
+  const target = (url: string) => ({ chainId: 1n, url })
+
+  test("a rate-limited RPC gets a second, gentler try", async () => {
+    const calls = new Map<string, number>()
+    const answers = await probeGently([target("https://busy.example/a"), target("https://calm.example/b")], async (t) => {
+      calls.set(t.url, (calls.get(t.url) ?? 0) + 1)
+      return reading(t.url.includes("busy") && calls.get(t.url) === 1 ? "rate-limited" : "ok")
+    }, 1)
+    expect(calls.get("https://busy.example/a")).toBe(2)
+    expect(calls.get("https://calm.example/b")).toBe(1)
+    expect(answers.map((a: any) => a.outcome)).toEqual(["ok", "ok"])
+  })
+
+  test("the second try goes one at a time per host", async () => {
+    let live = 0
+    let worst = 0
+    const seen = new Set<string>()
+    await probeGently(["a", "b", "c", "d"].map((p) => target(`https://busy.example/${p}`)), async (t) => {
+      if (!seen.has(t.url)) {
+        seen.add(t.url)
+        return reading("rate-limited")
+      }
+      worst = Math.max(worst, ++live)
+      await Bun.sleep(2)
+      live--
+      return reading("ok")
+    }, 1)
+    expect(worst).toBe(1)
+  })
+
+  test("a host that keeps refusing costs one retry, not one per chain", async () => {
+    let calls = 0
+    await probeGently(["a", "b", "c", "d", "e"].map((p) => target(`https://gateway.example/${p}`)), async () => {
+      calls++
+      return reading("rate-limited")
+    }, 1)
+    expect(calls).toBe(6)
+  })
+
+  const fields = { chainId: 1n, url: "https://a", up: true, chainIdOk: true, genesis: "ok", latencyMs: 12, lagBlocks: 0, checkedAt: 10_000n, blockNumber: 5n, blockHash: "0xb", genesisSeen: "0xg" }
+
+  test("a new reading signs its block time, and changing it breaks the signature", async () => {
+    const account = privateKeyToAccount(generatePrivateKey())
+    const signed = { ...fields, blockTime: 9_000n }
+    const sig = await account.signMessage({ message: readingText(signed) })
+    expect(await signerOf(signed, sig)).toBe(account.address)
+    expect(await signerOf({ ...signed, blockTime: 9_999n }, sig)).not.toBe(account.address)
+  })
+
+  test("a reading from an older prober still verifies", async () => {
+    const account = privateKeyToAccount(generatePrivateKey())
+    const sig = await account.signMessage({ message: readingText(fields) })
+    expect(await signerOf(fields, sig)).toBe(account.address)
+    expect(readingText(fields).startsWith("chainkiv/health/1|")).toBe(true)
+  })
+
+  test("removing the block time from a new reading breaks its signature", async () => {
+    const account = privateKeyToAccount(generatePrivateKey())
+    const sig = await account.signMessage({ message: readingText({ ...fields, blockTime: 1n }) })
+    expect(await signerOf(fields, sig)).not.toBe(account.address)
+  })
+
+  test("a head over an hour old is stale, and an unknown time isn't held against an RPC", () => {
+    expect(isStaleHead({ checkedAt: 10_000, blockTime: 10_000 - 3_601 })).toBe(true)
+    expect(isStaleHead({ checkedAt: 10_000, blockTime: 10_000 - 3_600 })).toBe(false)
+    expect(isStaleHead({ checkedAt: 10_000, blockTime: 0 })).toBe(false)
+    expect(isStaleHead({ checkedAt: 10_000 })).toBe(false)
+    expect(isStaleHead({ checkedAt: 10_000, lagBlocks: 1_000 })).toBe(true)
+  })
+
+  test("limits sent as RPC errors are recognised, and a real error is not", () => {
+    for (const text of ["you reached public endpoint limit", "rate limit exceeded", "Too Many Requests", "daily quota used"]) expect(LIMIT_MESSAGE.test(text)).toBe(true)
+    for (const text of ["the method eth_getBlockByNumber does not exist/is not available", "execution reverted", "gas limit too low"]) expect(LIMIT_MESSAGE.test(text)).toBe(false)
   })
 })
