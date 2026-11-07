@@ -38,6 +38,64 @@ Sources for the other columns: the [upstream repo](https://github.com/ethereum-l
 [description of Chainlist](https://checker.gitcoin.co/public/application/7bZe3Bp77a/show). "Not checked by us" means we did
 not confirm it either way.
 
+## Why not something else?
+
+Chainroll needs five things at once:
+
+1. **Query it:** ask by chain ID, by parent, by prefix or by health, with no server of ours.
+2. **Change it constantly:** two probers update 958 RPCs every 20 minutes, which is about 138,000 writes a day.
+3. **Let it expire:** a reading from a stopped prober has to disappear by itself, so it can't leave a false green.
+4. **Know who wrote it:** anyone can write, and readers can still pick out the publisher's and the probers' records.
+5. **Read it from a browser:** a static site has to work with no backend and no login.
+
+| Option | Query it | Constant change | Expiry | Who wrote it | Browser with no backend | What it does better than Arkiv |
+|---|---|---|---|---|---|---|
+| **Arkiv** | Yes, typed and indexed | Yes, patched in place | Yes, built in | Yes, the chain sets `$owner` | Yes | See below for its limits |
+| **GitHub** | No, you read files | No, 138,000 writes a day isn't what a repo is for | No | Yes, by commit | Files only, with 60 API calls an hour per network | Review and history. It stays the source of truth |
+| **Postgres** | Yes, the best of any here | Yes | With a cleanup job | Only what our server says | No, it needs an API | Speed, joins and full-text search |
+| **IPFS** | No, by hash only | No, every change is a new hash | No, files stay while pinned | No, a hash says what, not who | Depends on public gateways | Moving one file by its content |
+| **Swarm** | No, by reference only | No, not for this | Paid time, by stamp | No | Yes, by reference | Keeping files. We use it for that |
+| **A smart contract** | Only what the contract exposes | Costly at this volume | Must be built | Yes | Yes, through an RPC | Strong guarantees for small, important data |
+| **An indexer (The Graph)** | Yes | Yes | Must be built | Only as far as its source shows | Through a hosted service | Reading chain history that already exists |
+
+### Why not GitHub?
+
+GitHub is where the list is reviewed, and it should stay there. It is a poor place for live data:
+
+- **It can't say what works.** On 7 Nov 2026 the Blast file still fed the list while 0 of its 21 RPCs passed. A file only changes
+  when someone sends a pull request.
+- **It can't be queried.** "Every L2 of Ethereum" means downloading every file, because there is no query.
+- **It has a low limit.** Without a login, GitHub's API allows 60 calls an hour per network, and we ran through that repeatedly
+  while building.
+- **One company hosts it.** A bad day at GitHub takes the one copy most tools read.
+
+### Why not Postgres?
+
+Postgres would be faster, and it answers richer queries than Arkiv does. It fails on trust, not on speed.
+
+A database shows what its operator says. Readers would have to trust our server, and we would have to run accounts, moderation
+and an API, then keep them running. Chainroll's site is static files because nothing needs to go through us. With Postgres, every
+promise on this page would become "trust us".
+
+### Why not IPFS?
+
+IPFS finds a file by its hash, which suits a file that never changes. A health reading changes every 20 minutes, so its hash
+would too, and nothing could ask "which RPCs pass?" across files.
+
+We tested it for chain logos on 7 Nov 2026, using the IPFS links in the upstream list. Three public gateways refused all 40
+requests with HTTP 429. A fourth served 23 of 40, at about 6 seconds each.
+
+### Why we still use Ethereum and Swarm
+
+Arkiv isn't the right place for everything, so each job goes where it fits:
+
+| Job | Where | Why |
+|---|---|---|
+| Live, queryable records | Arkiv | The five needs above |
+| Who to trust, and the signed root | Ethereum and ENS | Hard to rewrite, and outside Arkiv, so Arkiv can't vouch for itself |
+| Copies and probe history | Swarm | Files that outlive a testnet, and prove themselves |
+| The source of truth | GitHub | Where maintainers already review changes |
+
 ## Questions the list cannot answer today
 
 Every query here ran on Rabdi on 7 Nov 2026 with no access key and no wallet. Counts are from that run, and health counts
